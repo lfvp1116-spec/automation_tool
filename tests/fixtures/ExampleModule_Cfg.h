@@ -1,0 +1,13 @@
+#ifndef EXAMPLEMODULE_CFG_H
+#define EXAMPLEMODULE_CFG_H
+
+#define STD_ON  1u
+#define STD_OFF 0u
+
+#define DET_DEBUG_ENABLED STD_OFF
+#define FEATURE_X STD_ON
+#define DET_DLTFILTERSIZE 0u
+
+#define EXAMPLE_ALIAS_SWITCH FEATURE_X
+
+#endif

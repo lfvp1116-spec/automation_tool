@@ -1,0 +1,39 @@
+# Project information
+project_name: "Release_DMS"
+project_root: "C:/Users/valle004/Documents/PROYECTO/REPOS/Release_DMS"
+
+# Target configuration
+core: "Core1"
+build_mode: "Release"
+
+# Makefiles to analyze
+makefiles:
+  - "BuildTools/Core1/Make/config/compile_opt.mk"
+  - "BuildTools/Core1/Make/config/project.mk"
+
+# Source directories to scan recursively
+source_paths:
+  - "Source/Core1"
+  - "Source/common"
+  - "Models/Core1/Common/MCAL/P8242_05_McalCfg_v1190/output/generated/src"
+  - "Models/Core1/Common/MCAL/P8242_05_McalCfg_v1190/output/generated/include"
+
+# File extensions allowed for source scanning
+extensions:
+  - ".c"
+  - ".h"
+  - ".cpp"
+  - ".hpp"
+
+# Directories excluded from scanning
+exclude_paths:
+  - "BuildTools"
+  - ".metadata"
+  - "Source/Core0"
+
+# Initial keyword categories for future classification
+keywords:
+  - "DEBUG"
+  - "TEST"
+  - "INTEGRATION"
+  - "FEATURE"
