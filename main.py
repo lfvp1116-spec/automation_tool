@@ -3,6 +3,7 @@ from pathlib import Path
 from src.config_loader import load_project_config
 from src.makefile_parser import parse_makefile
 from src.preprocessor_parser import find_preprocessor_directives
+from src.report_generator import generate_excel_report
 from src.source_scanner import find_source_files
 
 
@@ -101,6 +102,9 @@ def main() -> None:
         print(f"ERROR: {error}")
         return
 
+    # ---------------------------------------------------------
+    # Project configuration summary
+    # ---------------------------------------------------------
     print("=" * 60)
     print("AUTOMATION TOOL - PROJECT CONFIGURATION")
     print("=" * 60)
@@ -135,7 +139,10 @@ def main() -> None:
     )
 
     try:
-        fixture_makefile_data = parse_makefile(fixture_makefile)
+        fixture_makefile_data = parse_makefile(
+            fixture_makefile,
+            config["build_mode"],
+        )
     except (FileNotFoundError, ValueError) as error:
         print(f"\nERROR while reading controlled Makefile: {error}")
         return
@@ -195,7 +202,39 @@ def main() -> None:
     )
 
     # ---------------------------------------------------------
-    # 4. Real DMS Makefile: Core1 / Release
+    # 4. Controlled Excel report generation
+    # ---------------------------------------------------------
+    controlled_report_path = (
+        project_folder
+        / "output"
+        / "compiler_switches_report_controlled.xlsx"
+    )
+
+    try:
+        generated_controlled_report = generate_excel_report(
+            output_path=controlled_report_path,
+            project_name="Controlled_Project",
+            core=config["core"],
+            build_mode=config["build_mode"],
+            project_root=project_folder,
+            makefile_data=fixture_makefile_data,
+            source_file_count=len(fixture_source_files),
+            findings=fixture_findings,
+        )
+    except OSError as error:
+        print(
+            "\nERROR while generating controlled Excel report: "
+            f"{error}"
+        )
+        return
+
+    print("\n" + "=" * 60)
+    print("CONTROLLED EXCEL REPORT GENERATED")
+    print("=" * 60)
+    print(f"Report path: {generated_controlled_report}")
+
+    # ---------------------------------------------------------
+    # 5. Real DMS Makefile: Core1 / Release
     # ---------------------------------------------------------
     dms_makefile_relative_path = config["makefiles"][0]
 
@@ -219,7 +258,7 @@ def main() -> None:
     )
 
     # ---------------------------------------------------------
-    # 5. Real DMS source scanner: Core1 / Release
+    # 6. Real DMS source scanner: Core1 / Release
     # ---------------------------------------------------------
     dms_source_paths = [
         Path(config["project_root"]) / source_path
@@ -258,19 +297,20 @@ def main() -> None:
 
     print("\nFirst 10 source files found:")
 
+    dms_project_root = Path(config["project_root"])
+
     for source_file in dms_source_files[:10]:
         relative_path = source_file.relative_to(
-            Path(config["project_root"])
+            dms_project_root
         )
 
         print(f"  - {relative_path}")
 
-
     # ---------------------------------------------------------
-    # 6. Real DMS preprocessor parser: CddOsph.c
+    # 7. Real DMS preprocessor parser: CddOsph.c
     # ---------------------------------------------------------
     cddosph_file = (
-        Path(config["project_root"])
+        dms_project_root
         / "Source"
         / "Core1"
         / "BSW"
@@ -311,10 +351,10 @@ def main() -> None:
             f"{finding['expression']}"
         )
 
-        print(f"    Macros: {macros}")  
+        print(f"    Macros: {macros}")
 
     # ---------------------------------------------------------
-    # 7. Full DMS preprocessor scan: Core1 / Release
+    # 8. Full DMS preprocessor scan: Core1 / Release
     # ---------------------------------------------------------
     all_dms_findings = []
 
@@ -358,11 +398,12 @@ def main() -> None:
 
     print("\nFirst 10 findings:")
 
-    project_root = Path(config["project_root"])
-
     for finding in all_dms_findings[:10]:
         finding_path = Path(finding["path"])
-        relative_path = finding_path.relative_to(project_root)
+        relative_path = finding_path.relative_to(
+            dms_project_root
+        )
+
         macros = ", ".join(finding["macros"])
 
         print(
@@ -373,6 +414,45 @@ def main() -> None:
         )
 
         print(f"    Macros: {macros}")
+
+    # ---------------------------------------------------------
+    # 9. Real DMS Excel report generation
+    # ---------------------------------------------------------
+    dms_report_path = (
+        project_folder
+        / "output"
+        / "compiler_switches_report.xlsx"
+    )
+
+    try:
+        generated_dms_report = generate_excel_report(
+            output_path=dms_report_path,
+            project_name=config["project_name"],
+            core=config["core"],
+            build_mode=config["build_mode"],
+            project_root=dms_project_root,
+            makefile_data=dms_makefile_data,
+            source_file_count=len(dms_source_files),
+            findings=all_dms_findings,
+        )
+    except OSError as error:
+        print(
+            "\nERROR while generating DMS Excel report: "
+            f"{error}"
+        )
+        return
+
+    print("\n" + "=" * 60)
+    print("DMS EXCEL REPORT GENERATED")
+    print("=" * 60)
+    print(f"Report path: {generated_dms_report}")
+    print(f"Source files exported: {len(dms_source_files)}")
+    print(
+        "Preprocessor conditions exported: "
+        f"{len(all_dms_findings)}"
+    )
+
+
 
 if __name__ == "__main__":
     main()
