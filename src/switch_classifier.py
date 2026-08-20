@@ -1,5 +1,6 @@
 from typing import Any
 
+import re
 
 CATEGORY_KEYWORDS = {
     "DEBUG": [
@@ -45,7 +46,28 @@ TOOLCHAIN_KEYWORDS = [
     "_CORE_CM7_",
     "ARM_MATH_",
     "CPU_TYPE",
+    "__ARM_ARCH_",
+    "__ARM_FEATURE_",
+    "CY_CPU_CORTEX_",
+    "__GHS__",
 ]
+
+VENDOR_CMSIS_KEYWORDS = [
+    "__VENDOR_SYSTICKCONFIG",
+]
+
+PLATFORM_CAPABILITY_PREFIXES = (
+    "ACT_PLATFORM_",
+)
+
+CMSIS_FRAMEWORK_FILE_PREFIXES = (
+    "cmsis_",
+    "core_cm",
+)
+
+CMSIS_FRAMEWORK_FILE_NAMES = (
+    "mpu_armv7.h",
+)
 
 STATIC_ANALYSIS_KEYWORDS = [
     "LINT",
@@ -56,10 +78,15 @@ STATIC_ANALYSIS_KEYWORDS = [
     "POLYSPACE",
 ]
 
+TEST_FRAMEWORK_KEYWORDS = [
+    "TESSY",
+]
+
 GENERATED_TEST_PREFIXES = (
     "CDD_TEST_",
     "BSW_TEST_",
     "MCAL_TEST_",
+    "FBL",
 )
 
 GENERATED_TEST_KEYWORDS = [
@@ -67,8 +94,12 @@ GENERATED_TEST_KEYWORDS = [
     "ATOMIC",
     "CPUTYPE",
     "COMPILER",
-    "CONFIGURATION_VARIANT",
+    "PROCESSOR_",
+    "COMP_",
+    "GEN_GENERATOR",
+    "POSTBUILD_VARIANT",
 ]
+
 
 HEADER_GUARD_SUFFIXES = (
     "_H",
@@ -144,9 +175,39 @@ def classify_preprocessor_finding(
         TOOLCHAIN_KEYWORDS,
     )
 
+
+    is_device_selection_condition = (
+        _is_device_selection_condition(
+            file_name=file_name,
+            macros=macros,
+        )
+    )
+    
+    is_vendor_cmsis_condition = _contains_keyword(
+        searchable_text,
+        VENDOR_CMSIS_KEYWORDS,
+    )
+
+    is_cmsis_framework_condition = (
+        _is_cmsis_framework_condition(
+            file_name=file_name,
+        )
+    )
+
+    is_platform_capability_condition = (
+        _is_platform_capability_condition(
+            macros=macros,
+        )
+    )
+
     is_static_analysis_condition = _contains_keyword(
         searchable_text,
         STATIC_ANALYSIS_KEYWORDS,
+    )
+
+    is_test_framework_condition = _contains_keyword(
+        searchable_text,
+        TEST_FRAMEWORK_KEYWORDS,
     )
 
     is_generated_test_condition = (
@@ -156,18 +217,41 @@ def classify_preprocessor_finding(
         )
     )
 
+    is_generated_configuration_variant = (
+        _is_generated_configuration_variant(
+            macros=macros,
+        )
+    )
+
     filter_reason = _get_filter_reason(
         is_header_guard=is_header_guard,
         is_memmap=is_memmap,
-        is_toolchain_condition=is_toolchain_condition,
+        is_toolchain_condition=(
+            is_toolchain_condition
+            or is_device_selection_condition
+        ),
+        is_vendor_cmsis_condition=(
+            is_vendor_cmsis_condition
+        ),
+        is_cmsis_framework_condition=(
+            is_cmsis_framework_condition
+        ),
+        is_platform_capability_condition=(
+            is_platform_capability_condition
+        ),
         is_static_analysis_condition=(
             is_static_analysis_condition
+        ),
+        is_test_framework_condition=(
+            is_test_framework_condition
         ),
         is_generated_test_condition=(
             is_generated_test_condition
         ),
+        is_generated_configuration_variant=(
+            is_generated_configuration_variant
+        ),
     )
-
     is_relevant = (
         category != "OTHER"
         and not filter_reason
@@ -181,11 +265,29 @@ def classify_preprocessor_finding(
         "is_toolchain_condition": (
             is_toolchain_condition
         ),
+        "is_device_selection_condition": (
+            is_device_selection_condition
+        ),
+        "is_vendor_cmsis_condition": (
+            is_vendor_cmsis_condition
+        ),
+        "is_cmsis_framework_condition": (
+            is_cmsis_framework_condition
+        ),
+        "is_platform_capability_condition": (
+            is_platform_capability_condition
+        ),
         "is_static_analysis_condition": (
             is_static_analysis_condition
         ),
+        "is_test_framework_condition": (
+            is_test_framework_condition
+        ),
         "is_generated_test_condition": (
             is_generated_test_condition
+        ),
+        "is_generated_configuration_variant": (
+            is_generated_configuration_variant
         ),
         "is_relevant": is_relevant,
         "filter_reason": filter_reason,
@@ -224,6 +326,9 @@ def _get_category(
     INTEGRATION has priority over TEST because a condition such as
     INTEGRATION_WATCHDOG_TESTS is more specifically an integration
     condition than a generic test condition.
+
+    SIL is matched as an independent token. This avoids false
+    positives in identifiers such as COMM_SILENT_COMMUNICATION.
     """
 
     category_order = [
@@ -239,7 +344,10 @@ def _get_category(
         matched_keywords = [
             keyword
             for keyword in keywords
-            if keyword in searchable_text
+            if _matches_category_keyword(
+                searchable_text=searchable_text,
+                keyword=keyword,
+            )
         ]
 
         if matched_keywords:
@@ -247,6 +355,26 @@ def _get_category(
 
     return "OTHER", []
 
+def _matches_category_keyword(
+    searchable_text: str,
+    keyword: str,
+) -> bool:
+    """
+    Matches a category keyword against a preprocessor condition.
+
+    SIL requires token-aware matching so SILENT, ASILVAR, and other
+    larger identifiers do not become TEST conditions accidentally.
+    """
+
+    normalized_keyword = keyword.upper()
+
+    if normalized_keyword == "SIL":
+        return re.search(
+            r"(?<![A-Z0-9])SIL(?![A-Z0-9])",
+            searchable_text,
+        ) is not None
+
+    return normalized_keyword in searchable_text
 
 def _is_header_guard(
     directive: str,
@@ -287,6 +415,54 @@ def _is_header_guard(
         HEADER_GUARD_SUFFIXES
     )
 
+def _is_device_selection_condition(
+    file_name: str,
+    macros: list[str],
+) -> bool:
+    """
+    Detects Cypress/Infineon device-selection conditions in the
+    vendor device-header file.
+
+    Examples:
+    - CYT2B77CAE
+    - CYT2B78BAS
+    - CYT2B78CAE
+
+    The file restriction prevents project-specific macros with a
+    similar name from being excluded unintentionally.
+    """
+
+    if file_name.lower() != "cy_device_headers.h":
+        return False
+
+    return any(
+        macro.upper().startswith("CYT")
+        for macro in macros
+    )
+
+def _is_cmsis_framework_condition(
+    file_name: str,
+) -> bool:
+    """
+    Detects conditions located in known CMSIS framework headers.
+
+    These headers contain compiler, architecture, FPU, intrinsic,
+    and Cortex-core infrastructure checks rather than application
+    compiler switches.
+
+    The filename restriction prevents application conditions using
+    similar macro names from being filtered automatically.
+    """
+
+    normalized_file_name = file_name.lower()
+
+    return (
+        normalized_file_name.startswith(
+            CMSIS_FRAMEWORK_FILE_PREFIXES
+        )
+        or normalized_file_name
+        in CMSIS_FRAMEWORK_FILE_NAMES
+    )
 
 def _is_generated_test_condition(
     macros: list[str],
@@ -296,9 +472,8 @@ def _is_generated_test_condition(
     Detects internal/generated test conditions commonly found in
     AUTOSAR, BSW, CDD, or MCAL generated code.
 
-    The rule is conservative: it requires both:
-    - a known generated-test prefix, such as CDD_TEST_;
-    - an internal implementation keyword, such as DUMMY or ATOMIC.
+    The macro must use a known generated-test prefix and include
+    an implementation-oriented keyword.
     """
 
     normalized_macros = [
@@ -321,6 +496,66 @@ def _is_generated_test_condition(
         and has_internal_test_keyword
     )
 
+def _is_platform_capability_condition(
+    macros: list[str],
+) -> bool:
+    """
+    Detects platform capability macros used by the ACT/SecPrim
+    implementation layer.
+
+    Examples:
+    - ACT_PLATFORM_ALIGNMENT
+    - ACT_PLATFORM_CPUTYPE_32BIT
+    - ACT_PLATFORM_UINT64_AVAILABLE
+
+    These conditions describe compiler/platform capabilities rather
+    than functional product switches.
+    """
+
+    normalized_macros = [
+        macro.upper()
+        for macro in macros
+    ]
+
+    return any(
+        macro.startswith(PLATFORM_CAPABILITY_PREFIXES)
+        for macro in normalized_macros
+    )
+
+def _is_generated_configuration_variant(
+    macros: list[str],
+) -> bool:
+    """
+    Detects generated build/configuration-variant conditions.
+
+    These macros select generated compile-time or post-build variants
+    instead of enabling a functional product feature.
+
+    Examples:
+    - CDDOSPH_CONFIGURATION_VARIANT_PRECOMPILE
+    - FBLBMHDR_CONFIGURATION_VARIANT_LINKTIME
+    - CANIF_CONFIG_VARIANT
+    - CANIF_POSTBUILD_VARIANT_SUPPORT
+    """
+
+    variant_keywords = (
+        "CONFIGURATION_VARIANT",
+        "CONFIG_VARIANT",
+        "POSTBUILD_VARIANT",
+    )
+
+    normalized_macros = [
+        macro.upper()
+        for macro in macros
+    ]
+
+    return any(
+        any(
+            keyword in macro
+            for keyword in variant_keywords
+        )
+        for macro in normalized_macros
+    )
 
 def _contains_keyword(
     searchable_text: str,
@@ -340,8 +575,13 @@ def _get_filter_reason(
     is_header_guard: bool,
     is_memmap: bool,
     is_toolchain_condition: bool,
+    is_vendor_cmsis_condition: bool,
+    is_cmsis_framework_condition: bool,
+    is_platform_capability_condition: bool,
     is_static_analysis_condition: bool,
+    is_test_framework_condition: bool,
     is_generated_test_condition: bool,
+    is_generated_configuration_variant: bool,
 ) -> str:
     """
     Returns the primary reason why a condition is excluded.
@@ -356,10 +596,27 @@ def _get_filter_reason(
     if is_toolchain_condition:
         return "Toolchain or architecture condition"
 
+    if is_vendor_cmsis_condition:
+        return "Vendor CMSIS configuration condition"
+
+    if is_cmsis_framework_condition:
+        return "CMSIS framework condition"
+
+    if is_platform_capability_condition:
+        return "Platform capability condition"
+
     if is_static_analysis_condition:
         return "Static-analysis condition"
 
+    if is_test_framework_condition:
+        return "Test framework or instrumentation condition"
+
     if is_generated_test_condition:
         return "Generated or internal test condition"
+
+    if is_generated_configuration_variant:
+        return (
+            "Generated configuration-variant condition"
+        )
 
     return ""
