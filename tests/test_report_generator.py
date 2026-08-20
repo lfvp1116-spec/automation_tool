@@ -72,15 +72,25 @@ def test_generate_excel_report_with_controlled_data(
     )
 
     assert workbook.sheetnames == [
-        "Summary",
-        "Compiler Switches",
-        "Preprocessor Conditions",
+    "Summary",
+    "Compiler Switches",
+    "Preprocessor Conditions",
+    "Filtered Compiler Switches",
+    "Excluded Conditions",
     ]
 
     summary_sheet = workbook["Summary"]
     switches_sheet = workbook["Compiler Switches"]
     conditions_sheet = workbook[
         "Preprocessor Conditions"
+    ]
+
+    filtered_switches_sheet = workbook[
+    "Filtered Compiler Switches"
+    ]
+
+    excluded_conditions_sheet = workbook[
+    "Excluded Conditions"
     ]
 
     assert summary_sheet["A1"].value == "Metric"
@@ -90,8 +100,26 @@ def test_generate_excel_report_with_controlled_data(
     assert switches_sheet["J1"].value == "Entry Type"
     assert switches_sheet.max_row == 6
 
-    assert conditions_sheet["A1"].value == "Project"
-    assert conditions_sheet["H1"].value == "Expression"
+    assert conditions_sheet["A1"].value == "Source File"
+    assert conditions_sheet["E1"].value == "Expression"
     assert conditions_sheet.max_row == 6
+
+    assert (
+    filtered_switches_sheet["A1"].value
+    == "Source File"
+    )
+    assert (
+    filtered_switches_sheet["G1"].value
+    == "Category"
+    )
+
+    assert (
+    excluded_conditions_sheet["A1"].value
+    == "Source File"
+    )
+    assert (
+    excluded_conditions_sheet["H1"].value
+    == "Filter Reason"
+    )
 
     workbook.close()

@@ -1,458 +1,330 @@
 from pathlib import Path
+from typing import Any
 
-from src.config_loader import load_project_config
+import yaml
+
+from src.execution_logger import write_execution_log
 from src.makefile_parser import parse_makefile
 from src.preprocessor_parser import find_preprocessor_directives
 from src.report_generator import generate_excel_report
 from src.source_scanner import find_source_files
+from src.switch_classifier import (
+    classify_preprocessor_finding,
+)
+
+CONFIGURATION_PATH = Path("config/project_paths.yaml")
+
+OUTPUT_DIRECTORY = Path("output")
+REPORT_PATH = OUTPUT_DIRECTORY / "compiler_switches_report.xlsx"
+EXECUTION_LOG_PATH = OUTPUT_DIRECTORY / "execution_log.txt"
+
+DEFAULT_EXCLUDED_PATHS = [
+    ".venv",
+    "venv",
+    ".git",
+    ".pytest_cache",
+    "__pycache__",
+    "tests",
+    "output",
+]
 
 
-def print_makefile_results(title: str, makefile_data: dict) -> None:
+def load_project_configuration(
+    configuration_path: Path,
+) -> dict[str, Any]:
     """
-    Prints the results obtained from a parsed Makefile.
-    """
-
-    print("\n" + "=" * 60)
-    print(title)
-    print("=" * 60)
-
-    print(f"Makefile: {makefile_data['makefile']}")
-    print(f"Compiler: {makefile_data['compiler']}")
-    print(f"CPU: {makefile_data['cpu']}")
-    print(f"FPU: {makefile_data['fpu']}")
-    print(f"Instruction mode: {makefile_data['instruction_mode']}")
-    print(f"Optimization: {makefile_data['optimization']}")
-
-    print("\nExplicit -D macros found:")
-    print(f"  Total: {len(makefile_data['macros'])}")
-
-    if makefile_data["macros"]:
-        for macro in makefile_data["macros"]:
-            print(f"  - {macro['name']} = {macro['value']}")
-    else:
-        print("  - None found")
-
-    print("\nDefinitions associated with the configured build mode:")
-
-    if makefile_data["build_mode_definitions"]:
-        for definition in makefile_data["build_mode_definitions"]:
-            print(
-                f"  - {definition['name']} = "
-                f"{definition['value']}"
-            )
-    else:
-        print("  - None found")
-
-
-def print_source_scanner_results(
-    title: str,
-    source_files: list[Path],
-) -> None:
-    """
-    Prints a summary of source files found by the scanner.
+    Loads project configuration from the YAML file.
     """
 
-    print("\n" + "=" * 60)
-    print(title)
-    print("=" * 60)
-
-    print(f"Source files found: {len(source_files)}")
-
-    for source_file in source_files:
-        print(f"  - {source_file.name}")
-
-
-def print_preprocessor_results(
-    title: str,
-    findings: list[dict],
-) -> None:
-    """
-    Prints preprocessor directives detected in a source file.
-    """
-
-    print("\n" + "=" * 60)
-    print(title)
-    print("=" * 60)
-
-    print(f"Preprocessor directives found: {len(findings)}")
-
-    for finding in findings:
-        macros = ", ".join(finding["macros"])
-
-        print(
-            f"  - Line {finding['line_number']} | "
-            f"{finding['directive']} | "
-            f"{finding['expression']}"
+    if not configuration_path.exists():
+        raise FileNotFoundError(
+            "Project configuration file was not found: "
+            f"{configuration_path}"
         )
 
-        print(f"    Macros: {macros}")
+    with configuration_path.open(
+        "r",
+        encoding="utf-8",
+    ) as configuration_file:
+        configuration = yaml.safe_load(
+            configuration_file
+        )
+
+    if not isinstance(configuration, dict):
+        raise ValueError(
+            "The project configuration must contain "
+            "a YAML dictionary."
+        )
+
+    return configuration
 
 
-def main() -> None:
+def resolve_project_paths(
+    project_root: Path,
+    relative_paths: list[str],
+) -> list[Path]:
     """
-    Main entry point of the automation tool.
+    Converts configured relative paths into absolute project paths.
     """
 
-    project_folder = Path(__file__).parent
-    config_path = project_folder / "config" / "project_paths.yaml"
-
-    try:
-        config = load_project_config(config_path)
-    except (FileNotFoundError, ValueError) as error:
-        print(f"ERROR: {error}")
-        return
-
-    # ---------------------------------------------------------
-    # Project configuration summary
-    # ---------------------------------------------------------
-    print("=" * 60)
-    print("AUTOMATION TOOL - PROJECT CONFIGURATION")
-    print("=" * 60)
-
-    print(f"Project: {config['project_name']}")
-    print(f"Project root: {config['project_root']}")
-    print(f"Core: {config['core']}")
-    print(f"Build mode: {config['build_mode']}")
-
-    print("\nMakefiles configured:")
-    for makefile in config["makefiles"]:
-        print(f"  - {makefile}")
-
-    print("\nSource paths configured:")
-    for source_path in config["source_paths"]:
-        print(f"  - {source_path}")
-
-    print("\nExcluded paths:")
-    for excluded_path in config["exclude_paths"]:
-        print(f"  - {excluded_path}")
-
-    print("=" * 60)
-
-    # ---------------------------------------------------------
-    # 1. Controlled Makefile example
-    # ---------------------------------------------------------
-    fixture_makefile = (
-        project_folder
-        / "tests"
-        / "fixtures"
-        / "compile_opt_example.mk"
-    )
-
-    try:
-        fixture_makefile_data = parse_makefile(
-            fixture_makefile,
-            config["build_mode"],
-        )
-    except (FileNotFoundError, ValueError) as error:
-        print(f"\nERROR while reading controlled Makefile: {error}")
-        return
-
-    print_makefile_results(
-        "MAKEFILE PARSER - CONTROLLED EXAMPLE",
-        fixture_makefile_data,
-    )
-
-    # ---------------------------------------------------------
-    # 2. Controlled source scanner example
-    # ---------------------------------------------------------
-    fixture_source_path = (
-        project_folder
-        / "tests"
-        / "fixtures"
-    )
-
-    try:
-        fixture_source_files = find_source_files(
-            source_paths=[fixture_source_path],
-            extensions=config["extensions"],
-        )
-    except (FileNotFoundError, ValueError) as error:
-        print(f"\nERROR while scanning controlled source files: {error}")
-        return
-
-    print_source_scanner_results(
-        "SOURCE SCANNER - CONTROLLED EXAMPLE",
-        fixture_source_files,
-    )
-
-    # ---------------------------------------------------------
-    # 3. Controlled preprocessor parser example
-    # ---------------------------------------------------------
-    fixture_c_file = (
-        project_folder
-        / "tests"
-        / "fixtures"
-        / "ExampleModule.c"
-    )
-
-    try:
-        fixture_findings = find_preprocessor_directives(
-            fixture_c_file
-        )
-    except (FileNotFoundError, ValueError) as error:
-        print(
-            "\nERROR while parsing controlled "
-            f"source file: {error}"
-        )
-        return
-
-    print_preprocessor_results(
-        "PREPROCESSOR PARSER - CONTROLLED EXAMPLE",
-        fixture_findings,
-    )
-
-    # ---------------------------------------------------------
-    # 4. Controlled Excel report generation
-    # ---------------------------------------------------------
-    controlled_report_path = (
-        project_folder
-        / "output"
-        / "compiler_switches_report_controlled.xlsx"
-    )
-
-    try:
-        generated_controlled_report = generate_excel_report(
-            output_path=controlled_report_path,
-            project_name="Controlled_Project",
-            core=config["core"],
-            build_mode=config["build_mode"],
-            project_root=project_folder,
-            makefile_data=fixture_makefile_data,
-            source_file_count=len(fixture_source_files),
-            findings=fixture_findings,
-        )
-    except OSError as error:
-        print(
-            "\nERROR while generating controlled Excel report: "
-            f"{error}"
-        )
-        return
-
-    print("\n" + "=" * 60)
-    print("CONTROLLED EXCEL REPORT GENERATED")
-    print("=" * 60)
-    print(f"Report path: {generated_controlled_report}")
-
-    # ---------------------------------------------------------
-    # 5. Real DMS Makefile: Core1 / Release
-    # ---------------------------------------------------------
-    dms_makefile_relative_path = config["makefiles"][0]
-
-    dms_makefile_path = (
-        Path(config["project_root"])
-        / dms_makefile_relative_path
-    )
-
-    try:
-        dms_makefile_data = parse_makefile(
-            dms_makefile_path,
-            config["build_mode"],
-        )
-    except (FileNotFoundError, ValueError) as error:
-        print(f"\nERROR while reading DMS Makefile: {error}")
-        return
-
-    print_makefile_results(
-        "MAKEFILE PARSER - DMS / CORE1 / RELEASE",
-        dms_makefile_data,
-    )
-
-    # ---------------------------------------------------------
-    # 6. Real DMS source scanner: Core1 / Release
-    # ---------------------------------------------------------
-    dms_source_paths = [
-        Path(config["project_root"]) / source_path
-        for source_path in config["source_paths"]
+    return [
+        project_root / relative_path
+        for relative_path in relative_paths
     ]
 
-    try:
-        dms_source_files = find_source_files(
-            source_paths=dms_source_paths,
-            extensions=config["extensions"],
-            excluded_paths=config["exclude_paths"],
-        )
-    except (FileNotFoundError, ValueError) as error:
-        print(f"\nERROR while scanning DMS source files: {error}")
-        return
 
-    print("\n" + "=" * 60)
-    print("SOURCE SCANNER - DMS / CORE1 / RELEASE")
-    print("=" * 60)
+def parse_configured_makefiles(
+    makefile_paths: list[Path],
+    build_mode: str,
+) -> dict[str, Any]:
+    """
+    Parses all configured Makefiles and combines the relevant
+    compiler configuration fields for the Excel report.
+    """
 
-    print(f"Total source files found: {len(dms_source_files)}")
+    parsed_makefiles: list[dict[str, Any]] = []
 
-    extension_counts = {}
+    for makefile_path in makefile_paths:
+        if not makefile_path.exists():
+            print(
+                "Warning: Configured Makefile was not found: "
+                f"{makefile_path}"
+            )
+            continue
 
-    for source_file in dms_source_files:
-        extension = source_file.suffix.lower()
-
-        extension_counts[extension] = (
-            extension_counts.get(extension, 0) + 1
-        )
-
-    print("\nFiles by extension:")
-
-    for extension in sorted(extension_counts):
-        print(f"  - {extension}: {extension_counts[extension]}")
-
-    print("\nFirst 10 source files found:")
-
-    dms_project_root = Path(config["project_root"])
-
-    for source_file in dms_source_files[:10]:
-        relative_path = source_file.relative_to(
-            dms_project_root
+        parsed_makefiles.append(
+            parse_makefile(
+                makefile_path=makefile_path,
+                build_mode=build_mode,
+            )
         )
 
-        print(f"  - {relative_path}")
+    if not parsed_makefiles:
+        return {
+            "Compiler": "Not detected",
+            "CPU": "Not detected",
+            "FPU": "Not detected",
+            "Instruction mode": "Not detected",
+            "Optimization": "Not detected",
+        }
 
-    # ---------------------------------------------------------
-    # 7. Real DMS preprocessor parser: CddOsph.c
-    # ---------------------------------------------------------
-    cddosph_file = (
-        dms_project_root
-        / "Source"
-        / "Core1"
-        / "BSW"
-        / "CDDs"
-        / "CddOsph"
-        / "core"
-        / "CddOsph.c"
-    )
+    return {
+        "Compiler": _get_first_detected_value(
+            parsed_makefiles,
+            "compiler",
+        ),
+        "CPU": _get_first_detected_value(
+            parsed_makefiles,
+            "cpu",
+        ),
+        "FPU": _get_first_detected_value(
+            parsed_makefiles,
+            "fpu",
+        ),
+        "Instruction mode": _get_first_detected_value(
+            parsed_makefiles,
+            "instruction_mode",
+        ),
+        "Optimization": _get_first_detected_value(
+            parsed_makefiles,
+            "optimization",
+        ),
+    }
 
-    try:
-        cddosph_findings = find_preprocessor_directives(
-            cddosph_file
-        )
-    except (FileNotFoundError, ValueError) as error:
-        print(
-            "\nERROR while parsing CddOsph.c: "
-            f"{error}"
-        )
-        return
 
-    print("\n" + "=" * 60)
-    print("PREPROCESSOR PARSER - DMS / CddOsph.c")
-    print("=" * 60)
+def _get_first_detected_value(
+    parsed_makefiles: list[dict[str, Any]],
+    field_name: str,
+) -> str:
+    """
+    Returns the first available value found across parsed Makefiles.
+    """
 
-    print(
-        "Preprocessor directives found: "
-        f"{len(cddosph_findings)}"
-    )
+    for makefile_data in parsed_makefiles:
+        value = makefile_data.get(field_name)
 
-    print("\nFirst 10 findings:")
+        if value is not None and str(value).strip():
+            return str(value)
 
-    for finding in cddosph_findings[:10]:
-        macros = ", ".join(finding["macros"])
+    return "Not detected"
 
-        print(
-            f"  - Line {finding['line_number']} | "
-            f"{finding['directive']} | "
-            f"{finding['expression']}"
-        )
 
-        print(f"    Macros: {macros}")
+def scan_preprocessor_conditions(
+    source_files: list[Path],
+) -> list[dict[str, Any]]:
+    """
+    Scans every source file using preprocessor_parser.py.
 
-    # ---------------------------------------------------------
-    # 8. Full DMS preprocessor scan: Core1 / Release
-    # ---------------------------------------------------------
-    all_dms_findings = []
+    The returned findings contain:
+    - path
+    - file_name
+    - line_number
+    - directive
+    - expression
+    - macros
+    """
 
-    for source_file in dms_source_files:
+    findings: list[dict[str, Any]] = []
+
+    for source_file in source_files:
         try:
             file_findings = find_preprocessor_directives(
                 source_file
             )
-        except (FileNotFoundError, ValueError) as error:
+
+            findings.extend(file_findings)
+
+        except (OSError, UnicodeDecodeError) as error:
             print(
-                "\nWARNING: Source file could not be parsed: "
-                f"{error}"
+                "Warning: Could not analyze source file: "
+                f"{source_file}"
             )
-            continue
+            print(f"Reason: {error}")
 
-        all_dms_findings.extend(file_findings)
+    return findings
 
-    directive_counts = {}
 
-    for finding in all_dms_findings:
-        directive = finding["directive"]
+def main() -> None:
+    """
+    Main entry point for the Automation Tool.
+    """
 
-        directive_counts[directive] = (
-            directive_counts.get(directive, 0) + 1
+    OUTPUT_DIRECTORY.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    configuration = load_project_configuration(
+        CONFIGURATION_PATH
+    )
+
+    project_name = str(
+        configuration["project_name"]
+    )
+    project_root = Path(
+        configuration["project_root"]
+    )
+    core = str(configuration["core"])
+    build_mode = str(configuration["build_mode"])
+
+    configured_source_paths = list(
+        configuration.get("source_paths", [])
+    )
+    configured_makefiles = list(
+        configuration.get("makefiles", [])
+    )
+    extensions = list(
+        configuration.get("extensions", [])
+    )
+    configured_exclusions = list(
+        configuration.get("exclude_paths", [])
+    )
+
+    excluded_paths = list(
+        dict.fromkeys(
+            configured_exclusions
+            + DEFAULT_EXCLUDED_PATHS
         )
+    )
 
-    print("\n" + "=" * 60)
-    print("FULL PREPROCESSOR SCAN - DMS / CORE1 / RELEASE")
-    print("=" * 60)
+    source_paths = resolve_project_paths(
+        project_root=project_root,
+        relative_paths=configured_source_paths,
+    )
 
-    print(f"Source files analyzed: {len(dms_source_files)}")
+    makefile_paths = resolve_project_paths(
+        project_root=project_root,
+        relative_paths=configured_makefiles,
+    )
+
+    print("AUTOMATION TOOL STARTED")
+    print(f"Project: {project_name}")
+    print(f"Project root: {project_root}")
+    print(f"Core: {core}")
+    print(f"Build mode: {build_mode}")
+
+    source_files = find_source_files(
+        source_paths=source_paths,
+        extensions=extensions,
+        excluded_paths=excluded_paths,
+    )
+
+    raw_findings = scan_preprocessor_conditions(
+    source_files
+    )
+
+    findings = classify_preprocessor_conditions(
+    raw_findings
+    )
+
+    makefile_data = parse_configured_makefiles(
+        makefile_paths=makefile_paths,
+        build_mode=build_mode,
+    )
+
+    generated_report_path = generate_excel_report(
+        output_path=REPORT_PATH,
+        project_name=project_name,
+        core=core,
+        build_mode=build_mode,
+        project_root=project_root,
+        makefile_data=makefile_data,
+        source_file_count=len(source_files),
+        findings=findings,
+    )
+
+    generated_log_path = write_execution_log(
+        log_path=EXECUTION_LOG_PATH,
+        project_name=project_name,
+        core=core,
+        build_mode=build_mode,
+        source_file_count=len(source_files),
+        directive_count=len(findings),
+        report_path=str(
+            generated_report_path.resolve()
+        ),
+    )
+
+    print(f"Source files analyzed: {len(source_files)}")
     print(
         "Preprocessor directives found: "
-        f"{len(all_dms_findings)}"
+        f"{len(findings)}"
     )
-
-    print("\nDirectives by type:")
-
-    for directive in sorted(directive_counts):
-        print(f"  - {directive}: {directive_counts[directive]}")
-
-    print("\nFirst 10 findings:")
-
-    for finding in all_dms_findings[:10]:
-        finding_path = Path(finding["path"])
-        relative_path = finding_path.relative_to(
-            dms_project_root
-        )
-
-        macros = ", ".join(finding["macros"])
-
-        print(
-            f"  - {relative_path} | "
-            f"Line {finding['line_number']} | "
-            f"{finding['directive']} | "
-            f"{finding['expression']}"
-        )
-
-        print(f"    Macros: {macros}")
-
-    # ---------------------------------------------------------
-    # 9. Real DMS Excel report generation
-    # ---------------------------------------------------------
-    dms_report_path = (
-        project_folder
-        / "output"
-        / "compiler_switches_report.xlsx"
-    )
-
-    try:
-        generated_dms_report = generate_excel_report(
-            output_path=dms_report_path,
-            project_name=config["project_name"],
-            core=config["core"],
-            build_mode=config["build_mode"],
-            project_root=dms_project_root,
-            makefile_data=dms_makefile_data,
-            source_file_count=len(dms_source_files),
-            findings=all_dms_findings,
-        )
-    except OSError as error:
-        print(
-            "\nERROR while generating DMS Excel report: "
-            f"{error}"
-        )
-        return
-
-    print("\n" + "=" * 60)
-    print("DMS EXCEL REPORT GENERATED")
-    print("=" * 60)
-    print(f"Report path: {generated_dms_report}")
-    print(f"Source files exported: {len(dms_source_files)}")
     print(
-        "Preprocessor conditions exported: "
-        f"{len(all_dms_findings)}"
+        "Excel report generated: "
+        f"{generated_report_path.resolve()}"
     )
+    print(
+        "Execution log generated: "
+        f"{generated_log_path.resolve()}"
+    )
+    print("AUTOMATION TOOL FINISHED")
 
+def classify_preprocessor_conditions(
+    findings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Adds classification and filtering information to every
+    detected preprocessor condition.
+    """
+
+    classified_findings: list[dict[str, Any]] = []
+
+    for finding in findings:
+        classification = classify_preprocessor_finding(
+            finding
+        )
+
+        classified_findings.append(
+            {
+                **finding,
+                **classification,
+            }
+        )
+
+    return classified_findings
 
 
 if __name__ == "__main__":
+
     main()
