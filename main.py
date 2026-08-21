@@ -4,6 +4,16 @@ from typing import Any
 import yaml
 
 from src.execution_logger import write_execution_log
+
+from src.macro_indexer import (
+    build_project_macro_index,
+    get_effective_macro_definitions,
+)
+
+from src.macro_resolution_service import (
+    resolve_relevant_macros,
+)
+
 from src.makefile_parser import parse_makefile
 from src.preprocessor_parser import find_preprocessor_directives
 from src.report_generator import generate_excel_report
@@ -11,6 +21,7 @@ from src.source_scanner import find_source_files
 from src.switch_classifier import (
     classify_preprocessor_finding,
 )
+
 
 CONFIGURATION_PATH = Path("config/project_paths.yaml")
 
@@ -73,13 +84,13 @@ def resolve_project_paths(
     ]
 
 
-def parse_configured_makefiles(
+def parse_configured_makefiles_data(
     makefile_paths: list[Path],
     build_mode: str,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """
-    Parses all configured Makefiles and combines the relevant
-    compiler configuration fields for the Excel report.
+    Parses every configured Makefile and returns the complete
+    information needed for macro indexing and report generation.
     """
 
     parsed_makefiles: list[dict[str, Any]] = []
@@ -98,6 +109,17 @@ def parse_configured_makefiles(
                 build_mode=build_mode,
             )
         )
+
+    return parsed_makefiles
+
+
+def summarize_makefile_data(
+    parsed_makefiles: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Creates the summarized Makefile information displayed in the
+    Compiler Switches worksheet.
+    """
 
     if not parsed_makefiles:
         return {
@@ -184,6 +206,31 @@ def scan_preprocessor_conditions(
     return findings
 
 
+def classify_preprocessor_conditions(
+    findings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Adds classification and filtering information to every detected
+    preprocessor condition.
+    """
+
+    classified_findings: list[dict[str, Any]] = []
+
+    for finding in findings:
+        classification = classify_preprocessor_finding(
+            finding
+        )
+
+        classified_findings.append(
+            {
+                **finding,
+                **classification,
+            }
+        )
+
+    return classified_findings
+
+
 def main() -> None:
     """
     Main entry point for the Automation Tool.
@@ -249,17 +296,66 @@ def main() -> None:
         excluded_paths=excluded_paths,
     )
 
+    parsed_makefiles = parse_configured_makefiles_data(
+        makefile_paths=makefile_paths,
+        build_mode=build_mode,
+    )
+
+    makefile_data = summarize_makefile_data(
+        parsed_makefiles=parsed_makefiles,
+    )
+
+    macro_index = build_project_macro_index(
+        source_files=source_files,
+        makefiles_data=parsed_makefiles,
+    )
+
+    effective_macro_definitions = (
+        get_effective_macro_definitions(
+            macro_index
+        )
+    )
+
     raw_findings = scan_preprocessor_conditions(
-    source_files
+        source_files
     )
 
     findings = classify_preprocessor_conditions(
-    raw_findings
+        raw_findings
     )
 
-    makefile_data = parse_configured_makefiles(
-        makefile_paths=makefile_paths,
-        build_mode=build_mode,
+    macro_resolution_results = resolve_relevant_macros(
+        findings=findings,
+        macro_index=macro_index,
+    )
+
+    print(f"Source files analyzed: {len(source_files)}")
+
+    print(
+        "Macro definitions indexed: "
+        f"{len(macro_index)}"
+    )
+
+    print(
+        "Effective macro definitions available: "
+        f"{len(effective_macro_definitions)}"
+    )
+
+    print(
+        "Preprocessor directives found: "
+        f"{len(findings)}"
+    )
+
+    resolved_macros = [
+    result
+    for result in macro_resolution_results
+    if result["is_resolved"]
+]
+
+    print(
+        "Relevant unique macros resolved: "
+        f"{len(resolved_macros)} / "
+        f"{len(macro_resolution_results)}"
     )
 
     generated_report_path = generate_excel_report(
@@ -271,6 +367,7 @@ def main() -> None:
         makefile_data=makefile_data,
         source_file_count=len(source_files),
         findings=findings,
+        macro_resolutions=macro_resolution_results,
     )
 
     generated_log_path = write_execution_log(
@@ -285,46 +382,18 @@ def main() -> None:
         ),
     )
 
-    print(f"Source files analyzed: {len(source_files)}")
-    print(
-        "Preprocessor directives found: "
-        f"{len(findings)}"
-    )
     print(
         "Excel report generated: "
         f"{generated_report_path.resolve()}"
     )
+
     print(
         "Execution log generated: "
         f"{generated_log_path.resolve()}"
     )
+
     print("AUTOMATION TOOL FINISHED")
-
-def classify_preprocessor_conditions(
-    findings: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """
-    Adds classification and filtering information to every
-    detected preprocessor condition.
-    """
-
-    classified_findings: list[dict[str, Any]] = []
-
-    for finding in findings:
-        classification = classify_preprocessor_finding(
-            finding
-        )
-
-        classified_findings.append(
-            {
-                **finding,
-                **classification,
-            }
-        )
-
-    return classified_findings
 
 
 if __name__ == "__main__":
-
     main()

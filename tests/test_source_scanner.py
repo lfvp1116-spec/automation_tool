@@ -34,6 +34,7 @@ def test_find_allowed_source_files() -> None:
         "ExampleModule.c",
         "ExampleModule.h",
         "ExampleModule_Cfg.h",
+        "macro_definitions_example.h",
     ]
 
     assert file_names == expected_file_names

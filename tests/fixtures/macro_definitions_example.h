@@ -1,0 +1,19 @@
+#ifndef MACRO_DEFINITIONS_EXAMPLE_H
+#define MACRO_DEFINITIONS_EXAMPLE_H
+
+#define STD_OFF 0
+#define STD_ON  1
+
+#define PROJECT_FEATURE_ENABLED STD_ON
+#define FEATURE_ALIAS PROJECT_FEATURE_ENABLED
+
+#define EMPTY_SWITCH
+
+#define LITERAL_VALUE 42
+
+#define FUNCTION_LIKE_MACRO(value) ((value) + 1)
+
+#define CYCLE_A CYCLE_B
+#define CYCLE_B CYCLE_A
+
+#endif

@@ -5,10 +5,10 @@ from openpyxl import load_workbook
 from src.makefile_parser import parse_makefile
 from src.preprocessor_parser import find_preprocessor_directives
 from src.report_generator import generate_excel_report
-
 from src.switch_classifier import (
     classify_preprocessor_finding,
 )
+
 
 def get_project_root() -> Path:
     """
@@ -16,6 +16,7 @@ def get_project_root() -> Path:
     """
 
     return Path(__file__).parent.parent
+
 
 def get_summary_value(
     worksheet,
@@ -110,24 +111,33 @@ def test_generate_excel_report_with_controlled_data(
         "Filtered Compiler Switches",
         "Excluded Conditions",
         "Relevant Switch Summary",
+        "Macro Resolution Summary",
     ]
 
     summary_sheet = workbook["Summary"]
-    switches_sheet = workbook["Compiler Switches"]
+
+    switches_sheet = workbook[
+        "Compiler Switches"
+    ]
+
     conditions_sheet = workbook[
         "Preprocessor Conditions"
     ]
 
     filtered_switches_sheet = workbook[
-    "Filtered Compiler Switches"
+        "Filtered Compiler Switches"
     ]
 
     excluded_conditions_sheet = workbook[
-    "Excluded Conditions"
+        "Excluded Conditions"
     ]
 
     relevant_switch_summary_sheet = workbook[
         "Relevant Switch Summary"
+    ]
+
+    macro_resolution_sheet = workbook[
+        "Macro Resolution Summary"
     ]
 
     assert summary_sheet["A1"].value == "Metric"
@@ -142,24 +152,77 @@ def test_generate_excel_report_with_controlled_data(
     assert conditions_sheet.max_row == 6
 
     assert (
-    filtered_switches_sheet["A1"].value
-    == "Source File"
-    )
-    assert (
-    filtered_switches_sheet["G1"].value
-    == "Category"
+        filtered_switches_sheet["A1"].value
+        == "Source File"
     )
 
     assert (
-    excluded_conditions_sheet["A1"].value
-    == "Source File"
+        filtered_switches_sheet["G1"].value
+        == "Category"
     )
+
     assert (
-    excluded_conditions_sheet["H1"].value
-    == "Filter Reason"
+        excluded_conditions_sheet["A1"].value
+        == "Source File"
+    )
+
+    assert (
+        excluded_conditions_sheet["H1"].value
+        == "Filter Reason"
+    )
+
+    assert (
+        relevant_switch_summary_sheet["A1"].value
+        == "Category"
+    )
+
+    assert (
+        relevant_switch_summary_sheet["B1"].value
+        == "Primary Macro"
+    )
+
+    assert (
+        relevant_switch_summary_sheet["C1"].value
+        == "Occurrences"
+    )
+
+    assert (
+        relevant_switch_summary_sheet["D1"].value
+        == "Files Affected"
+    )
+
+    assert (
+        macro_resolution_sheet["A1"].value
+        == "Category"
+    )
+
+    assert (
+        macro_resolution_sheet["B1"].value
+        == "Primary Macro"
+    )
+
+    assert (
+        macro_resolution_sheet["E1"].value
+        == "Resolved Value"
+    )
+
+    assert (
+        macro_resolution_sheet["H1"].value
+        == "Resolution Chain"
+    )
+
+    assert (
+        macro_resolution_sheet["I1"].value
+        == "Primary Definition Source"
+    )
+
+    assert (
+        macro_resolution_sheet["M1"].value
+        == "Terminal Definition Source"
     )
 
     workbook.close()
+
 
 def test_summary_includes_classification_metrics(
     tmp_path: Path,
@@ -205,7 +268,9 @@ def test_summary_includes_classification_metrics(
     ]
 
     classified_findings = [
-        finding | classify_preprocessor_finding(finding)
+        finding | classify_preprocessor_finding(
+            finding
+        )
         for finding in findings
     ]
 
@@ -231,10 +296,6 @@ def test_summary_includes_classification_metrics(
     )
 
     summary_sheet = workbook["Summary"]
-
-    relevant_switch_summary_sheet = workbook[
-    "Relevant Switch Summary"
-    ]
 
     assert get_summary_value(
         summary_sheet,
@@ -276,29 +337,15 @@ def test_summary_includes_classification_metrics(
         "TOTAL",
     ) == 1
 
-    assert (
-        relevant_switch_summary_sheet["A1"].value
-        == "Category"
-    )
-    assert (
-        relevant_switch_summary_sheet["B1"].value
-        == "Primary Macro"
-    )
-    assert (
-        relevant_switch_summary_sheet["C1"].value
-        == "Occurrences"
-    )
-    assert (
-        relevant_switch_summary_sheet["D1"].value
-        == "Files Affected"
-    )
+    workbook.close()
+
 
 def test_relevant_switch_summary_groups_repeated_macros(
     tmp_path: Path,
 ) -> None:
     """
-    Verifies that repeated relevant conditions are consolidated
-    into one summary row per category and primary macro.
+    Verifies that repeated relevant conditions are consolidated into
+    one summary row per category and primary macro.
     """
 
     findings = [
@@ -401,5 +448,104 @@ def test_relevant_switch_summary_groups_repeated_macros(
     assert worksheet["B3"].value == "DET_DEBUG_ENABLED"
     assert worksheet["C3"].value == 1
     assert worksheet["D3"].value == 1
+
+    workbook.close()
+
+
+def test_macro_resolution_summary_writes_resolution_evidence(
+    tmp_path: Path,
+) -> None:
+    """
+    Verifies that Macro Resolution Summary writes one row with macro
+    resolution data and primary/terminal definition evidence.
+    """
+
+    report_path = (
+        tmp_path
+        / "macro_resolution_report.xlsx"
+    )
+
+    macro_resolutions = [
+        {
+            "category": "FEATURE",
+            "primary_macro": "FEATURE_X",
+            "occurrences": 3,
+            "files_affected": 2,
+            "resolved_value": "1",
+            "effective_state": "Enabled",
+            "resolution_status": "Resolved",
+            "resolution_chain_text": (
+                "FEATURE_X -> STD_ON -> 1"
+            ),
+            "primary_definition_source": "Project_Cfg.h",
+            "primary_definition_line": 45,
+            "primary_definition_source_type": (
+                "generated_config"
+            ),
+            "primary_definition_priority": 4,
+            "terminal_definition_source": "Std_Types.h",
+            "terminal_definition_line": 20,
+            "terminal_definition_source_type": "header",
+            "terminal_definition_priority": 1,
+            "example_expression": (
+                "FEATURE_X == STD_ON"
+            ),
+            "example_source_file": "src/Example.c",
+            "example_line": 10,
+        }
+    ]
+
+    generated_report_path = generate_excel_report(
+        output_path=report_path,
+        project_name="Resolution_Project",
+        core="Core1",
+        build_mode="Release",
+        project_root=get_project_root(),
+        makefile_data={},
+        source_file_count=1,
+        findings=[],
+        macro_resolutions=macro_resolutions,
+    )
+
+    workbook = load_workbook(
+        generated_report_path,
+        read_only=True,
+    )
+
+    worksheet = workbook[
+        "Macro Resolution Summary"
+    ]
+
+    assert worksheet.max_row == 2
+
+    assert worksheet["A2"].value == "FEATURE"
+    assert worksheet["B2"].value == "FEATURE_X"
+    assert worksheet["C2"].value == 3
+    assert worksheet["D2"].value == 2
+    assert worksheet["E2"].value == "1"
+    assert worksheet["F2"].value == "Enabled"
+
+    assert (
+        worksheet["H2"].value
+        == "FEATURE_X -> STD_ON -> 1"
+    )
+
+    assert worksheet["I2"].value == "Project_Cfg.h"
+    assert worksheet["J2"].value == 45
+    assert worksheet["K2"].value == "generated_config"
+    assert worksheet["L2"].value == 4
+
+    assert worksheet["M2"].value == "Std_Types.h"
+    assert worksheet["N2"].value == 20
+    assert worksheet["O2"].value == "header"
+    assert worksheet["P2"].value == 1
+
+    assert (
+        worksheet["Q2"].value
+        == "FEATURE_X == STD_ON"
+    )
+
+    assert worksheet["R2"].value == "src/Example.c"
+    assert worksheet["S2"].value == 10
 
     workbook.close()

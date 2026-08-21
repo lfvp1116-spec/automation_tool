@@ -38,6 +38,7 @@ def generate_excel_report(
     makefile_data: dict[str, Any],
     source_file_count: int,
     findings: Iterable[dict[str, Any]],
+    macro_resolutions: Iterable[dict[str, Any]] | None = None,
 ) -> Path:
     """
     Generates an Excel report with:
@@ -55,6 +56,10 @@ def generate_excel_report(
     )
 
     findings_list = list(findings)
+
+    macro_resolutions_list = list(
+        macro_resolutions or []
+    )
 
     workbook = Workbook()
 
@@ -79,6 +84,10 @@ def generate_excel_report(
 
     relevant_switch_summary_sheet = workbook.create_sheet(
         title="Relevant Switch Summary"
+    )
+
+    macro_resolution_sheet = workbook.create_sheet(
+        title="Macro Resolution Summary"
     )
 
     _write_summary_sheet(
@@ -121,6 +130,11 @@ def generate_excel_report(
     _write_relevant_switch_summary_sheet(
         worksheet=relevant_switch_summary_sheet,
         findings=findings_list,
+    )
+
+    _write_macro_resolution_summary_sheet(
+        worksheet=macro_resolution_sheet,
+        macro_resolutions=macro_resolutions_list,
     )
 
     workbook.save(output_path)
@@ -1223,3 +1237,210 @@ def _get_primary_macro(
     return expression or "UNRESOLVED_EXPRESSION"
 
     return str(value)
+
+def _write_macro_resolution_summary_sheet(
+    worksheet: Worksheet,
+    macro_resolutions: list[dict[str, Any]],
+) -> None:
+    """
+    Writes macro-resolution results with alias chains and definition
+    evidence for each relevant unique compiler switch.
+    """
+
+    headers = [
+        "Category",
+        "Primary Macro",
+        "Occurrences",
+        "Files Affected",
+        "Resolved Value",
+        "Effective State",
+        "Resolution Status",
+        "Resolution Chain",
+        "Primary Definition Source",
+        "Primary Definition Line",
+        "Primary Definition Source Type",
+        "Primary Definition Priority",
+        "Terminal Definition Source",
+        "Terminal Definition Line",
+        "Terminal Definition Source Type",
+        "Terminal Definition Priority",
+        "Example Expression",
+        "Example Source File",
+        "Example Line",
+    ]
+
+    _write_headers(
+        worksheet=worksheet,
+        headers=headers,
+    )
+
+    for row_number, result in enumerate(
+        macro_resolutions,
+        start=2,
+    ):
+        worksheet.cell(
+            row=row_number,
+            column=1,
+            value=str(result.get("category", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=2,
+            value=str(result.get("primary_macro", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=3,
+            value=result.get("occurrences", 0),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=4,
+            value=result.get("files_affected", 0),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=5,
+            value=result.get("resolved_value", ""),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=6,
+            value=str(result.get("effective_state", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=7,
+            value=str(
+                result.get("resolution_status", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=8,
+            value=str(
+                result.get("resolution_chain_text", "")
+            ),
+        )
+
+        worksheet.cell(
+            row=row_number,
+            column=9,
+            value=str(
+                result.get(
+                    "primary_definition_source",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=10,
+            value=result.get(
+                "primary_definition_line",
+                "",
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=11,
+            value=str(
+                result.get(
+                    "primary_definition_source_type",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=12,
+            value=result.get(
+                "primary_definition_priority",
+                "",
+            ),
+        )
+
+        worksheet.cell(
+            row=row_number,
+            column=13,
+            value=str(
+                result.get(
+                    "terminal_definition_source",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=14,
+            value=result.get(
+                "terminal_definition_line",
+                "",
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=15,
+            value=str(
+                result.get(
+                    "terminal_definition_source_type",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=16,
+            value=result.get(
+                "terminal_definition_priority",
+                "",
+            ),
+        )
+
+        worksheet.cell(
+            row=row_number,
+            column=17,
+            value=str(
+                result.get("example_expression", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=18,
+            value=str(
+                result.get(
+                    "example_source_file",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=19,
+            value=result.get("example_line", ""),
+        )
+
+    _format_table(
+        worksheet=worksheet,
+                column_widths={
+            "A": 18,
+            "B": 58,
+            "C": 14,
+            "D": 16,
+            "E": 18,
+            "F": 20,
+            "G": 35,
+            "H": 75,
+            "I": 85,
+            "J": 16,
+            "K": 25,
+            "L": 18,
+            "M": 85,
+            "N": 16,
+            "O": 25,
+            "P": 18,
+            "Q": 85,
+            "R": 85,
+            "S": 14,
+        },
+    )
