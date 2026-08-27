@@ -471,3 +471,66 @@ def test_resolves_parenthesized_std_off_as_disabled() -> None:
             "-> STD_OFF -> 0u"
         )
     )
+
+def test_returns_conditional_definition_evidence() -> None:
+    macro_index = build_macro_index(
+        [
+            MacroDefinition(
+                name="STD_OFF",
+                value="0u",
+                source_file="Std_Types.h",
+                line_number=10,
+                source_type="header",
+                priority=1,
+            ),
+            MacroDefinition(
+                name="FEATURE_X",
+                value="STD_OFF",
+                source_file="Project_Cfg.h",
+                line_number=40,
+                source_type="conditional_definition",
+                priority=5,
+                conditional_context=(
+                    "!(FEATURE_SELECTOR == STD_ON)"
+                ),
+                resolved_conditional_context=(
+                    "!((0u == 1u))"
+                ),
+                conditional_context_evaluation=True,
+                conditional_selection_reason=(
+                    "Conditional branch evaluated as active"
+                ),
+            ),
+        ]
+    )
+
+    result = resolve_macro_with_evidence(
+        macro_name="FEATURE_X",
+        macro_index=macro_index,
+    )
+
+    assert (
+        result["primary_definition_condition"]
+        == "!(FEATURE_SELECTOR == STD_ON)"
+    )
+
+    assert (
+        result[
+            "resolved_primary_definition_condition"
+        ]
+        == "!((0u == 1u))"
+    )
+
+    assert (
+        result[
+            "primary_definition_condition_evaluation"
+        ]
+        is True
+    )
+
+    assert (
+        result[
+            "primary_definition_selection_reason"
+        ]
+        == "Conditional branch evaluated as active"
+    )

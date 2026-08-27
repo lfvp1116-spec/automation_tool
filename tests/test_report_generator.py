@@ -112,6 +112,8 @@ def test_generate_excel_report_with_controlled_data(
         "Excluded Conditions",
         "Relevant Switch Summary",
         "Macro Resolution Summary",
+        "Expression Evaluation",
+        "Unresolved Expr Summary",
     ]
 
     summary_sheet = workbook["Summary"]
@@ -138,6 +140,14 @@ def test_generate_excel_report_with_controlled_data(
 
     macro_resolution_sheet = workbook[
         "Macro Resolution Summary"
+    ]
+
+    expression_evaluation_sheet = workbook[
+        "Expression Evaluation"
+    ]
+
+    unresolved_expression_sheet = workbook[
+        "Unresolved Expr Summary"
     ]
 
     assert summary_sheet["A1"].value == "Metric"
@@ -219,6 +229,71 @@ def test_generate_excel_report_with_controlled_data(
     assert (
         macro_resolution_sheet["M1"].value
         == "Terminal Definition Source"
+    )
+
+    assert (
+        expression_evaluation_sheet["A1"].value
+        == "Source File"
+    )
+
+    assert (
+        expression_evaluation_sheet["F1"].value
+        == "Original Expression"
+    )
+
+    assert (
+        expression_evaluation_sheet["G1"].value
+        == "Resolved Expression"
+    )
+
+    assert (
+        expression_evaluation_sheet["I1"].value
+        == "Verdict"
+    )
+
+    assert (
+        expression_evaluation_sheet["L1"].value
+        == "Error Message"
+    )
+
+    assert (
+        unresolved_expression_sheet["A1"].value
+        == "Error Type"
+    )
+
+    assert (
+        unresolved_expression_sheet["B1"].value
+        == "Issue Key"
+    )
+
+    assert (
+        unresolved_expression_sheet["D1"].value
+        == "Occurrences"
+    )
+
+    assert (
+        unresolved_expression_sheet["F1"].value
+        == "Error Message"
+    )
+
+    assert (
+        macro_resolution_sheet["T1"].value
+        == "Primary Definition Condition"
+    )
+
+    assert (
+        macro_resolution_sheet["U1"].value
+        == "Resolved Primary Definition Condition"
+    )
+
+    assert (
+        macro_resolution_sheet["V1"].value
+        == "Primary Definition Condition Evaluation"
+    )
+
+    assert (
+        macro_resolution_sheet["W1"].value
+        == "Primary Definition Selection Reason"
     )
 
     workbook.close()
@@ -492,6 +567,17 @@ def test_macro_resolution_summary_writes_resolution_evidence(
             ),
             "example_source_file": "src/Example.c",
             "example_line": 10,
+
+            "primary_definition_condition": (
+                "FEATURE_SELECTOR == STD_OFF"
+            ),
+            "resolved_primary_definition_condition": (
+                "0u == 0u"
+            ),
+            "primary_definition_condition_evaluation": True,
+            "primary_definition_selection_reason": (
+                "Conditional branch evaluated as active"
+            ),
         }
     ]
 
@@ -547,5 +633,182 @@ def test_macro_resolution_summary_writes_resolution_evidence(
 
     assert worksheet["R2"].value == "src/Example.c"
     assert worksheet["S2"].value == 10
+
+    assert (
+        worksheet["T2"].value
+        == "FEATURE_SELECTOR == STD_OFF"
+    )
+
+    assert (
+        worksheet["U2"].value
+        == "0u == 0u"
+    )
+
+    assert worksheet["V2"].value == "True"
+
+    assert (
+        worksheet["W2"].value
+        == "Conditional branch evaluated as active"
+    )
+
+    workbook.close()
+
+def test_expression_evaluation_sheet_writes_results(
+    tmp_path: Path,
+) -> None:
+    """
+    Verifies that preprocessor expression evaluation evidence is
+    written to the dedicated report worksheet.
+    """
+
+    report_path = (
+        tmp_path
+        / "expression_evaluation_report.xlsx"
+    )
+
+    expression_evaluations = [
+        {
+            "source_file": "src/Example.c",
+            "file_name": "Example.c",
+            "line_number": 42,
+            "directive": "#if",
+            "category": "FEATURE",
+            "original_expression": (
+                "FEATURE_X == STD_ON"
+            ),
+            "resolved_expression": "(1u == 1u)",
+            "evaluation": True,
+            "verdict": "Active branch",
+            "evaluation_status": "Evaluated",
+            "referenced_macros": [
+                "FEATURE_X",
+                "STD_ON",
+            ],
+            "error_message": "",
+        }
+    ]
+
+    generated_report_path = generate_excel_report(
+        output_path=report_path,
+        project_name="Evaluation_Project",
+        core="Core1",
+        build_mode="Release",
+        project_root=get_project_root(),
+        makefile_data={},
+        source_file_count=1,
+        findings=[],
+        expression_evaluations=expression_evaluations,
+    )
+
+    workbook = load_workbook(
+        generated_report_path,
+        read_only=True,
+    )
+
+    worksheet = workbook[
+        "Expression Evaluation"
+    ]
+
+    assert worksheet.max_row == 2
+    assert worksheet["A2"].value == "src/Example.c"
+    assert worksheet["B2"].value == "Example.c"
+    assert worksheet["C2"].value == 42
+    assert worksheet["D2"].value == "#if"
+    assert worksheet["E2"].value == "FEATURE"
+
+    assert (
+        worksheet["F2"].value
+        == "FEATURE_X == STD_ON"
+    )
+
+    assert worksheet["G2"].value == "(1u == 1u)"
+    assert worksheet["H2"].value == "True"
+    assert worksheet["I2"].value == "Active branch"
+    assert worksheet["J2"].value == "Evaluated"
+
+    assert (
+        worksheet["K2"].value
+        == "FEATURE_X, STD_ON"
+    )
+
+    assert worksheet["L2"].value in (None, "")
+
+    workbook.close()
+
+def test_unresolved_expression_summary_sheet_writes_results(
+    tmp_path: Path,
+) -> None:
+    """
+    Verifies that grouped unresolved-expression issues are written to
+    the dedicated worksheet.
+    """
+
+    report_path = (
+        tmp_path
+        / "unresolved_expression_summary.xlsx"
+    )
+
+    unresolved_summary = [
+        {
+            "error_type": "Missing macro definition",
+            "issue_key": "DEM_FEATURE_FAST",
+            "category": "FEATURE",
+            "occurrences": 4,
+            "files_affected": 2,
+            "error_message": (
+                "Macro definition not found: "
+                "DEM_FEATURE_FAST"
+            ),
+            "example_original_expression": (
+                "DEM_FEATURE_FAST == STD_ON"
+            ),
+            "example_source_file": "src/Dem_A.c",
+            "example_line": 1362,
+            "example_directive": "#if",
+        }
+    ]
+
+    generated_report_path = generate_excel_report(
+        output_path=report_path,
+        project_name="Unresolved_Project",
+        core="Core1",
+        build_mode="Release",
+        project_root=get_project_root(),
+        makefile_data={},
+        source_file_count=1,
+        findings=[],
+        unresolved_expression_summary=unresolved_summary,
+    )
+
+    workbook = load_workbook(
+        generated_report_path,
+        read_only=True,
+    )
+
+    worksheet = workbook[
+        "Unresolved Expr Summary"
+    ]
+
+    assert worksheet.max_row == 2
+    assert worksheet["A2"].value == "Missing macro definition"
+    assert worksheet["B2"].value == "DEM_FEATURE_FAST"
+    assert worksheet["C2"].value == "FEATURE"
+    assert worksheet["D2"].value == 4
+    assert worksheet["E2"].value == 2
+
+    assert (
+        worksheet["F2"].value
+        == "Macro definition not found: "
+        "DEM_FEATURE_FAST"
+    )
+
+    assert (
+        worksheet["G2"].value
+        == "DEM_FEATURE_FAST == STD_ON"
+    )
+
+    assert worksheet["H2"].value == "src/Dem_A.c"
+    assert worksheet["I2"].value == 1362
+    assert worksheet["J2"].value == "#if"
 
     workbook.close()

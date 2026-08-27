@@ -39,6 +39,12 @@ def generate_excel_report(
     source_file_count: int,
     findings: Iterable[dict[str, Any]],
     macro_resolutions: Iterable[dict[str, Any]] | None = None,
+    expression_evaluations: (
+        Iterable[dict[str, Any]] | None
+    ) = None,
+    unresolved_expression_summary: (
+        Iterable[dict[str, Any]] | None
+    ) = None,
 ) -> Path:
     """
     Generates an Excel report with:
@@ -59,6 +65,14 @@ def generate_excel_report(
 
     macro_resolutions_list = list(
         macro_resolutions or []
+    )
+
+    expression_evaluations_list = list(
+        expression_evaluations or []
+    )
+
+    unresolved_expression_summary_list = list(
+        unresolved_expression_summary or []
     )
 
     workbook = Workbook()
@@ -90,6 +104,14 @@ def generate_excel_report(
         title="Macro Resolution Summary"
     )
 
+    expression_evaluation_sheet = workbook.create_sheet(
+        title="Expression Evaluation"
+    )
+
+    unresolved_expression_sheet = workbook.create_sheet(
+        title="Unresolved Expr Summary"
+    )
+
     _write_summary_sheet(
         worksheet=summary_sheet,
         project_name=project_name,
@@ -98,6 +120,7 @@ def generate_excel_report(
         project_root=project_root,
         source_file_count=source_file_count,
         findings=findings_list,
+        expression_evaluations=expression_evaluations_list,
     )
 
     _write_compiler_switches_sheet(
@@ -137,6 +160,18 @@ def generate_excel_report(
         macro_resolutions=macro_resolutions_list,
     )
 
+    _write_preprocessor_expression_evaluation_sheet(
+        worksheet=expression_evaluation_sheet,
+        expression_evaluations=expression_evaluations_list,
+    )
+
+    _write_unresolved_expression_summary_sheet(
+        worksheet=unresolved_expression_sheet,
+        unresolved_expression_summary=(
+            unresolved_expression_summary_list
+        ),
+    )
+
     workbook.save(output_path)
     workbook.close()
 
@@ -173,6 +208,7 @@ def _write_summary_sheet(
     project_root: Path,
     source_file_count: int,
     findings: list[dict[str, Any]],
+    expression_evaluations: list[dict[str, Any]],
 ) -> None:
     """
     Writes the Summary worksheet with project metadata, global
@@ -180,6 +216,30 @@ def _write_summary_sheet(
     """
 
     total_directives = len(findings)
+
+    evaluated_expressions = [
+        result
+        for result in expression_evaluations
+        if result.get("evaluation_status") == "Evaluated"
+    ]
+
+    active_branches = [
+        result
+        for result in evaluated_expressions
+        if result.get("evaluation") is True
+    ]
+
+    inactive_branches = [
+        result
+        for result in evaluated_expressions
+        if result.get("evaluation") is False
+    ]
+
+    unresolved_expressions = [
+        result
+        for result in expression_evaluations
+        if result.get("evaluation_status") != "Evaluated"
+    ]
 
     relevant_findings = [
         finding
@@ -235,6 +295,23 @@ def _write_summary_sheet(
         (
             "Pending OTHER conditions for review",
             len(pending_findings),
+        ),
+
+        (
+            "Relevant expressions evaluated",
+            len(evaluated_expressions),
+        ),
+        (
+            "Active branches",
+            len(active_branches),
+        ),
+        (
+            "Inactive branches",
+            len(inactive_branches),
+        ),
+        (
+            "Unresolved expressions",
+            len(unresolved_expressions),
         ),
     ]
 
@@ -1267,6 +1344,10 @@ def _write_macro_resolution_summary_sheet(
         "Example Expression",
         "Example Source File",
         "Example Line",
+        "Primary Definition Condition",
+        "Resolved Primary Definition Condition",
+        "Primary Definition Condition Evaluation",
+        "Primary Definition Selection Reason",
     ]
 
     _write_headers(
@@ -1420,6 +1501,49 @@ def _write_macro_resolution_summary_sheet(
             value=result.get("example_line", ""),
         )
 
+        worksheet.cell(
+            row=row_number,
+            column=20,
+            value=str(
+                result.get(
+                    "primary_definition_condition",
+                    "",
+                )
+                or ""
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=21,
+            value=str(
+                result.get(
+                    "resolved_primary_definition_condition",
+                    "",
+                )
+                or ""
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=22,
+            value=_format_optional_boolean(
+                result.get(
+                    "primary_definition_condition_evaluation"
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=23,
+            value=str(
+                result.get(
+                    "primary_definition_selection_reason",
+                    "",
+                )
+                or ""
+            ),
+        )
+
     _format_table(
         worksheet=worksheet,
                 column_widths={
@@ -1442,5 +1566,270 @@ def _write_macro_resolution_summary_sheet(
             "Q": 85,
             "R": 85,
             "S": 14,
+            "T": 95,
+            "U": 95,
+            "V": 28,
+            "W": 45,
         },
     )
+
+def _write_preprocessor_expression_evaluation_sheet(
+    worksheet: Worksheet,
+    expression_evaluations: list[dict[str, Any]],
+) -> None:
+    """
+    Writes the evaluation results for relevant preprocessor
+    expressions using the effective macro configuration.
+    """
+
+    headers = [
+        "Source File",
+        "File Name",
+        "Line",
+        "Directive",
+        "Category",
+        "Original Expression",
+        "Resolved Expression",
+        "Evaluation",
+        "Verdict",
+        "Evaluation Status",
+        "Referenced Macros",
+        "Error Message",
+    ]
+
+    _write_headers(
+        worksheet=worksheet,
+        headers=headers,
+    )
+
+    for row_number, result in enumerate(
+        expression_evaluations,
+        start=2,
+    ):
+        evaluation = result.get("evaluation")
+
+        if evaluation is True:
+            evaluation_text = "True"
+        elif evaluation is False:
+            evaluation_text = "False"
+        else:
+            evaluation_text = ""
+
+        worksheet.cell(
+            row=row_number,
+            column=1,
+            value=str(result.get("source_file", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=2,
+            value=str(result.get("file_name", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=3,
+            value=result.get("line_number", ""),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=4,
+            value=str(result.get("directive", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=5,
+            value=str(result.get("category", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=6,
+            value=str(
+                result.get("original_expression", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=7,
+            value=str(
+                result.get("resolved_expression", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=8,
+            value=evaluation_text,
+        )
+        worksheet.cell(
+            row=row_number,
+            column=9,
+            value=str(result.get("verdict", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=10,
+            value=str(
+                result.get("evaluation_status", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=11,
+            value=_format_list_value(
+                result.get("referenced_macros", [])
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=12,
+            value=str(
+                result.get("error_message", "")
+            ),
+        )
+
+    _format_table(
+        worksheet=worksheet,
+        column_widths={
+            "A": 85,
+            "B": 32,
+            "C": 12,
+            "D": 16,
+            "E": 18,
+            "F": 90,
+            "G": 90,
+            "H": 14,
+            "I": 25,
+            "J": 24,
+            "K": 70,
+            "L": 65,
+        },
+    )
+
+def _write_unresolved_expression_summary_sheet(
+    worksheet: Worksheet,
+    unresolved_expression_summary: list[dict[str, Any]],
+) -> None:
+    """
+    Writes one row per unique unresolved-expression issue.
+
+    This consolidates repeated unresolved conditions by technical
+    cause, making follow-up work easier to prioritize.
+    """
+
+    headers = [
+        "Error Type",
+        "Issue Key",
+        "Category",
+        "Occurrences",
+        "Files Affected",
+        "Error Message",
+        "Example Original Expression",
+        "Example Source File",
+        "Example Line",
+        "Example Directive",
+    ]
+
+    _write_headers(
+        worksheet=worksheet,
+        headers=headers,
+    )
+
+    for row_number, result in enumerate(
+        unresolved_expression_summary,
+        start=2,
+    ):
+        worksheet.cell(
+            row=row_number,
+            column=1,
+            value=str(result.get("error_type", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=2,
+            value=str(result.get("issue_key", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=3,
+            value=str(result.get("category", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=4,
+            value=result.get("occurrences", 0),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=5,
+            value=result.get("files_affected", 0),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=6,
+            value=str(result.get("error_message", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=7,
+            value=str(
+                result.get(
+                    "example_original_expression",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=8,
+            value=str(
+                result.get(
+                    "example_source_file",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=9,
+            value=result.get("example_line", ""),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=10,
+            value=str(
+                result.get(
+                    "example_directive",
+                    "",
+                )
+            ),
+        )
+
+    _format_table(
+        worksheet=worksheet,
+        column_widths={
+            "A": 42,
+            "B": 65,
+            "C": 18,
+            "D": 14,
+            "E": 16,
+            "F": 90,
+            "G": 100,
+            "H": 85,
+            "I": 14,
+            "J": 16,
+        },
+    )
+
+def _format_optional_boolean(
+    value: Any,
+) -> str:
+    """
+    Converts a boolean evaluation result into readable Excel text.
+    """
+
+    if value is True:
+        return "True"
+
+    if value is False:
+        return "False"
+
+    return ""

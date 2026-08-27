@@ -33,6 +33,11 @@ class MacroDefinition:
     source_type: str
     priority: int
 
+    conditional_context: str | None = None
+    resolved_conditional_context: str | None = None
+    conditional_context_evaluation: bool | None = None
+    conditional_selection_reason: str = ""
+
 
 def extract_macro_definition_records(
     source_file_path: str | Path,

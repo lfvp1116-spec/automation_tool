@@ -143,6 +143,30 @@ def resolve_macro_with_evidence(
             primary_definition_evidence,
             "priority",
         ),
+                "primary_definition_condition": (
+            _get_evidence_value(
+                primary_definition_evidence,
+                "conditional_context",
+            )
+        ),
+        "resolved_primary_definition_condition": (
+            _get_evidence_value(
+                primary_definition_evidence,
+                "resolved_conditional_context",
+            )
+        ),
+        "primary_definition_condition_evaluation": (
+            _get_evidence_value(
+                primary_definition_evidence,
+                "conditional_context_evaluation",
+            )
+        ),
+        "primary_definition_selection_reason": (
+            _get_evidence_value(
+                primary_definition_evidence,
+                "conditional_selection_reason",
+            )
+        ),
 
         # Evidence for terminal alias/value macro.
         "terminal_definition_source": _get_evidence_value(
