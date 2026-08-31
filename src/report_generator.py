@@ -45,6 +45,8 @@ def generate_excel_report(
     unresolved_expression_summary: (
         Iterable[dict[str, Any]] | None
     ) = None,
+    rule_results: Iterable[dict[str, Any]] | None = None,
+    rule_summary: dict[str, int] | None = None,
 ) -> Path:
     """
     Generates an Excel report with:
@@ -74,6 +76,18 @@ def generate_excel_report(
     unresolved_expression_summary_list = list(
         unresolved_expression_summary or []
     )
+
+    rule_results_list = list(
+        rule_results or []
+    )
+
+    normalized_rule_summary = rule_summary or {
+        "total_rules": 0,
+        "pass_count": 0,
+        "fail_count": 0,
+        "review_count": 0,
+        "not_applicable_count": 0,
+    }
 
     workbook = Workbook()
 
@@ -112,6 +126,10 @@ def generate_excel_report(
         title="Unresolved Expr Summary"
     )
 
+    rule_verdicts_sheet = workbook.create_sheet(
+        title="Rule Verdicts"
+    )
+
     _write_summary_sheet(
         worksheet=summary_sheet,
         project_name=project_name,
@@ -121,6 +139,7 @@ def generate_excel_report(
         source_file_count=source_file_count,
         findings=findings_list,
         expression_evaluations=expression_evaluations_list,
+        rule_summary=normalized_rule_summary,
     )
 
     _write_compiler_switches_sheet(
@@ -172,6 +191,11 @@ def generate_excel_report(
         ),
     )
 
+    _write_rule_verdicts_sheet(
+        worksheet=rule_verdicts_sheet,
+        rule_results=rule_results_list,
+    )
+
     workbook.save(output_path)
     workbook.close()
 
@@ -209,6 +233,7 @@ def _write_summary_sheet(
     source_file_count: int,
     findings: list[dict[str, Any]],
     expression_evaluations: list[dict[str, Any]],
+    rule_summary: dict[str, int],
 ) -> None:
     """
     Writes the Summary worksheet with project metadata, global
@@ -282,21 +307,28 @@ def _write_summary_sheet(
         row_number=1,
         column_count=2,
     )
-
     summary_rows = [
         ("Project", project_name),
         ("Core", core),
         ("Build mode", build_mode),
         ("Project root", str(project_root)),
         ("Source files analyzed", source_file_count),
-        ("Total preprocessor directives analyzed", total_directives),
-        ("Relevant compiler switches", len(relevant_findings)),
-        ("Excluded conditions", len(excluded_findings)),
+        (
+            "Total preprocessor directives analyzed",
+            total_directives,
+        ),
+        (
+            "Relevant compiler switches",
+            len(relevant_findings),
+        ),
+        (
+            "Excluded conditions",
+            len(excluded_findings),
+        ),
         (
             "Pending OTHER conditions for review",
             len(pending_findings),
         ),
-
         (
             "Relevant expressions evaluated",
             len(evaluated_expressions),
@@ -312,6 +344,26 @@ def _write_summary_sheet(
         (
             "Unresolved expressions",
             len(unresolved_expressions),
+        ),
+        (
+            "Rules evaluated",
+            rule_summary["total_rules"],
+        ),
+        (
+            "Rule verdicts - PASS",
+            rule_summary["pass_count"],
+        ),
+        (
+            "Rule verdicts - FAIL",
+            rule_summary["fail_count"],
+        ),
+        (
+            "Rule verdicts - REVIEW",
+            rule_summary["review_count"],
+        ),
+        (
+            "Rule verdicts - NOT_APPLICABLE",
+            rule_summary["not_applicable_count"],
         ),
     ]
 
@@ -331,7 +383,7 @@ def _write_summary_sheet(
             value=value,
         )
 
-    exclusions_start_row = 13
+    exclusions_start_row = len(summary_rows) + 3
 
     _write_summary_section_header(
         worksheet=worksheet,
@@ -1833,3 +1885,206 @@ def _format_optional_boolean(
         return "False"
 
     return ""
+
+def _write_rule_verdicts_sheet(
+    worksheet: Worksheet,
+    rule_results: list[dict[str, Any]],
+) -> None:
+    """
+    Writes configured-rule results with verdicts and macro-resolution
+    evidence for technical traceability.
+    """
+
+    headers = [
+        "Rule ID",
+        "Macro",
+        "Description",
+        "Expected State",
+        "Expected Value",
+        "Actual State",
+        "Resolved Value",
+        "Resolution Status",
+        "Verdict",
+        "Reason",
+        "Resolution Chain",
+        "Primary Definition Source",
+        "Primary Definition Line",
+        "Primary Definition Source Type",
+        "Primary Definition Priority",
+        "Primary Definition Condition",
+        "Resolved Primary Definition Condition",
+        "Primary Definition Condition Evaluation",
+        "Primary Definition Selection Reason",
+    ]
+
+    _write_headers(
+        worksheet=worksheet,
+        headers=headers,
+    )
+
+    for row_number, result in enumerate(
+        rule_results,
+        start=2,
+    ):
+        worksheet.cell(
+            row=row_number,
+            column=1,
+            value=str(result.get("rule_id", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=2,
+            value=str(result.get("macro", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=3,
+            value=str(result.get("description", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=4,
+            value=str(result.get("expected_state", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=5,
+            value=str(result.get("expected_value", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=6,
+            value=str(result.get("actual_state", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=7,
+            value=str(result.get("resolved_value", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=8,
+            value=str(
+                result.get("resolution_status", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=9,
+            value=str(result.get("verdict", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=10,
+            value=str(result.get("reason", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=11,
+            value=str(
+                result.get("resolution_chain", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=12,
+            value=str(
+                result.get(
+                    "primary_definition_source",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=13,
+            value=result.get(
+                "primary_definition_line",
+                "",
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=14,
+            value=str(
+                result.get(
+                    "primary_definition_source_type",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=15,
+            value=result.get(
+                "primary_definition_priority",
+                "",
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=16,
+            value=str(
+                result.get(
+                    "primary_definition_condition",
+                    "",
+                )
+                or ""
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=17,
+            value=str(
+                result.get(
+                    "resolved_primary_definition_condition",
+                    "",
+                )
+                or ""
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=18,
+            value=_format_optional_boolean(
+                result.get(
+                    "primary_definition_condition_evaluation"
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=19,
+            value=str(
+                result.get(
+                    "primary_definition_selection_reason",
+                    "",
+                )
+                or ""
+            ),
+        )
+
+    _format_table(
+        worksheet=worksheet,
+        column_widths={
+            "A": 16,
+            "B": 58,
+            "C": 75,
+            "D": 20,
+            "E": 38,
+            "F": 20,
+            "G": 18,
+            "H": 38,
+            "I": 20,
+            "J": 75,
+            "K": 75,
+            "L": 85,
+            "M": 16,
+            "N": 28,
+            "O": 18,
+            "P": 95,
+            "Q": 95,
+            "R": 28,
+            "S": 45,
+        },
+    )

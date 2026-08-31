@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from openpyxl import load_workbook
 
@@ -19,9 +20,9 @@ def get_project_root() -> Path:
 
 
 def get_summary_value(
-    worksheet,
+    worksheet: Any,
     label: str,
-):
+) -> Any:
     """
     Returns the value in column B for the row whose column A matches
     the requested Summary label.
@@ -114,6 +115,7 @@ def test_generate_excel_report_with_controlled_data(
         "Macro Resolution Summary",
         "Expression Evaluation",
         "Unresolved Expr Summary",
+        "Rule Verdicts",
     ]
 
     summary_sheet = workbook["Summary"]
@@ -148,6 +150,10 @@ def test_generate_excel_report_with_controlled_data(
 
     unresolved_expression_sheet = workbook[
         "Unresolved Expr Summary"
+    ]
+
+    rule_verdicts_sheet = workbook[
+        "Rule Verdicts"
     ]
 
     assert summary_sheet["A1"].value == "Metric"
@@ -232,6 +238,26 @@ def test_generate_excel_report_with_controlled_data(
     )
 
     assert (
+        macro_resolution_sheet["T1"].value
+        == "Primary Definition Condition"
+    )
+
+    assert (
+        macro_resolution_sheet["U1"].value
+        == "Resolved Primary Definition Condition"
+    )
+
+    assert (
+        macro_resolution_sheet["V1"].value
+        == "Primary Definition Condition Evaluation"
+    )
+
+    assert (
+        macro_resolution_sheet["W1"].value
+        == "Primary Definition Selection Reason"
+    )
+
+    assert (
         expression_evaluation_sheet["A1"].value
         == "Source File"
     )
@@ -277,22 +303,52 @@ def test_generate_excel_report_with_controlled_data(
     )
 
     assert (
-        macro_resolution_sheet["T1"].value
+        rule_verdicts_sheet["A1"].value
+        == "Rule ID"
+    )
+
+    assert (
+        rule_verdicts_sheet["B1"].value
+        == "Macro"
+    )
+
+    assert (
+        rule_verdicts_sheet["D1"].value
+        == "Expected State"
+    )
+
+    assert (
+    rule_verdicts_sheet["E1"].value
+    == "Expected Value"
+    )
+
+    assert (
+        rule_verdicts_sheet["I1"].value
+        == "Verdict"
+    )
+
+    assert (
+        rule_verdicts_sheet["J1"].value
+        == "Reason"
+    )
+
+    assert (
+        rule_verdicts_sheet["K1"].value
+        == "Resolution Chain"
+    )
+
+    assert (
+        rule_verdicts_sheet["L1"].value
+        == "Primary Definition Source"
+    )
+
+    assert (
+        rule_verdicts_sheet["P1"].value
         == "Primary Definition Condition"
     )
 
     assert (
-        macro_resolution_sheet["U1"].value
-        == "Resolved Primary Definition Condition"
-    )
-
-    assert (
-        macro_resolution_sheet["V1"].value
-        == "Primary Definition Condition Evaluation"
-    )
-
-    assert (
-        macro_resolution_sheet["W1"].value
+        rule_verdicts_sheet["S1"].value
         == "Primary Definition Selection Reason"
     )
 
@@ -303,8 +359,8 @@ def test_summary_includes_classification_metrics(
     tmp_path: Path,
 ) -> None:
     """
-    Verifies that Summary contains overall, exclusion, and category
-    metrics derived from classified findings.
+    Verifies that Summary contains overall, exclusion, category,
+    expression-evaluation, and rule-verdict metrics.
     """
 
     findings = [
@@ -349,6 +405,29 @@ def test_summary_includes_classification_metrics(
         for finding in findings
     ]
 
+    expression_evaluations = [
+        {
+            "evaluation_status": "Evaluated",
+            "evaluation": True,
+        },
+        {
+            "evaluation_status": "Evaluated",
+            "evaluation": False,
+        },
+        {
+            "evaluation_status": "Unresolved",
+            "evaluation": None,
+        },
+    ]
+
+    rule_summary = {
+        "total_rules": 4,
+        "pass_count": 1,
+        "fail_count": 1,
+        "review_count": 1,
+        "not_applicable_count": 1,
+    }
+
     report_path = (
         tmp_path
         / "summary_metrics_report.xlsx"
@@ -363,6 +442,8 @@ def test_summary_includes_classification_metrics(
         makefile_data={},
         source_file_count=2,
         findings=classified_findings,
+        expression_evaluations=expression_evaluations,
+        rule_summary=rule_summary,
     )
 
     workbook = load_workbook(
@@ -394,22 +475,57 @@ def test_summary_includes_classification_metrics(
 
     assert get_summary_value(
         summary_sheet,
+        "Relevant expressions evaluated",
+    ) == 2
+
+    assert get_summary_value(
+        summary_sheet,
+        "Active branches",
+    ) == 1
+
+    assert get_summary_value(
+        summary_sheet,
+        "Inactive branches",
+    ) == 1
+
+    assert get_summary_value(
+        summary_sheet,
+        "Unresolved expressions",
+    ) == 1
+
+    assert get_summary_value(
+        summary_sheet,
+        "Rules evaluated",
+    ) == 4
+
+    assert get_summary_value(
+        summary_sheet,
+        "Rule verdicts - PASS",
+    ) == 1
+
+    assert get_summary_value(
+        summary_sheet,
+        "Rule verdicts - FAIL",
+    ) == 1
+
+    assert get_summary_value(
+        summary_sheet,
+        "Rule verdicts - REVIEW",
+    ) == 1
+
+    assert get_summary_value(
+        summary_sheet,
+        "Rule verdicts - NOT_APPLICABLE",
+    ) == 1
+
+    assert get_summary_value(
+        summary_sheet,
         "Header guard",
     ) == 1
 
     assert get_summary_value(
         summary_sheet,
         "Toolchain or architecture condition",
-    ) == 1
-
-    assert get_summary_value(
-        summary_sheet,
-        "FEATURE",
-    ) == 1
-
-    assert get_summary_value(
-        summary_sheet,
-        "TOTAL",
     ) == 1
 
     workbook.close()
@@ -567,7 +683,6 @@ def test_macro_resolution_summary_writes_resolution_evidence(
             ),
             "example_source_file": "src/Example.c",
             "example_line": 10,
-
             "primary_definition_condition": (
                 "FEATURE_SELECTOR == STD_OFF"
             ),
@@ -653,6 +768,7 @@ def test_macro_resolution_summary_writes_resolution_evidence(
 
     workbook.close()
 
+
 def test_expression_evaluation_sheet_writes_results(
     tmp_path: Path,
 ) -> None:
@@ -735,6 +851,7 @@ def test_expression_evaluation_sheet_writes_results(
 
     workbook.close()
 
+
 def test_unresolved_expression_summary_sheet_writes_results(
     tmp_path: Path,
 ) -> None:
@@ -810,5 +927,152 @@ def test_unresolved_expression_summary_sheet_writes_results(
     assert worksheet["H2"].value == "src/Dem_A.c"
     assert worksheet["I2"].value == 1362
     assert worksheet["J2"].value == "#if"
+
+    workbook.close()
+
+
+def test_rule_verdicts_sheet_writes_rule_results(
+    tmp_path: Path,
+) -> None:
+    """
+    Verifies that configured rule results are written to the
+    Rule Verdicts worksheet.
+    """
+
+    report_path = (
+        tmp_path
+        / "rule_verdicts_report.xlsx"
+    )
+
+    rule_results = [
+        {
+            "rule_id": "RULE-001",
+            "macro": "FEATURE_X",
+            "description": "Feature X must be enabled.",
+            "expected_state": "Enabled",
+            "actual_state": "Enabled",
+            "resolved_value": "1u",
+            "resolution_status": "Resolved",
+            "verdict": "PASS",
+            "reason": (
+                "The actual macro state matches the expected state."
+            ),
+            "resolution_chain": (
+                "FEATURE_X -> STD_ON -> 1u"
+            ),
+            "primary_definition_source": "Project_Cfg.h",
+            "primary_definition_line": 45,
+            "primary_definition_source_type": (
+                "conditional_definition"
+            ),
+            "primary_definition_priority": 5,
+            "primary_definition_condition": (
+                "FEATURE_SELECTOR == STD_ON"
+            ),
+            "resolved_primary_definition_condition": (
+                "1u == 1u"
+            ),
+            "primary_definition_condition_evaluation": True,
+            "primary_definition_selection_reason": (
+                "Conditional branch evaluated as active"
+            ),
+        },
+        {
+            "rule_id": "RULE-002",
+            "macro": "FEATURE_Y",
+            "description": "Feature Y must be disabled.",
+            "expected_state": "Disabled",
+            "actual_state": "Enabled",
+            "resolved_value": "1u",
+            "resolution_status": "Resolved",
+            "verdict": "FAIL",
+            "reason": (
+                "The actual macro state does not match the expected "
+                "state."
+            ),
+        },
+    ]
+
+    rule_summary = {
+        "total_rules": 2,
+        "pass_count": 1,
+        "fail_count": 1,
+        "review_count": 0,
+        "not_applicable_count": 0,
+    }
+
+    generated_report_path = generate_excel_report(
+        output_path=report_path,
+        project_name="Rules_Project",
+        core="Core1",
+        build_mode="Release",
+        project_root=get_project_root(),
+        makefile_data={},
+        source_file_count=1,
+        findings=[],
+        rule_results=rule_results,
+        rule_summary=rule_summary,
+    )
+
+    workbook = load_workbook(
+        generated_report_path,
+        read_only=True,
+    )
+
+    worksheet = workbook["Rule Verdicts"]
+
+    assert worksheet.max_row == 3
+
+    assert worksheet["A2"].value == "RULE-001"
+    assert worksheet["B2"].value == "FEATURE_X"
+    assert worksheet["D2"].value == "Enabled"
+
+    # Expected Value is empty for a state-based rule.
+    assert worksheet["E2"].value in (None, "")
+
+    assert worksheet["F2"].value == "Enabled"
+    assert worksheet["G2"].value == "1u"
+    assert worksheet["H2"].value == "Resolved"
+    assert worksheet["I2"].value == "PASS"
+    assert (
+        worksheet["K2"].value
+        == "FEATURE_X -> STD_ON -> 1u"
+    )
+
+    assert worksheet["L2"].value == "Project_Cfg.h"
+    assert worksheet["M2"].value == 45
+
+    assert (
+        worksheet["N2"].value
+        == "conditional_definition"
+    )
+
+    assert worksheet["O2"].value == 5
+
+    assert (
+        worksheet["P2"].value
+        == "FEATURE_SELECTOR == STD_ON"
+    )
+
+    assert (
+        worksheet["Q2"].value
+        == "1u == 1u"
+    )
+
+    assert worksheet["R2"].value == "True"
+
+    assert (
+        worksheet["S2"].value
+        == "Conditional branch evaluated as active"
+    )
+
+    assert (
+        worksheet["J2"].value
+        == "The actual macro state matches the expected state."
+    )
+
+    assert worksheet["A3"].value == "RULE-002"
+    assert worksheet["B3"].value == "FEATURE_Y"
+    assert worksheet["I3"].value == "FAIL"
 
     workbook.close()

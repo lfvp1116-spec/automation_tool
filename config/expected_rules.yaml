@@ -1,0 +1,258 @@
+# Expected compiler-switch configuration rules for the approved
+# Core1 / Release configuration.
+#
+# Sources:
+# - Previous TSN2001 Compiler Switches test report.
+# - Current macro-resolution and expression-evaluation evidence.
+#
+# Supported macro expected states:
+# - Enabled
+# - Disabled
+# - Defined
+# - Undefined
+# - null
+#
+# Rules may use:
+# - expected_state
+# - expected_value
+#
+# Expression rules use:
+# - expression
+# - expected_result
+
+
+rules:
+  - id: "REL-001"
+    macro: "DET_DEBUG_ENABLED"
+    expected_state: "Enabled"
+    description: >
+      DET_DEBUG_ENABLED is configured as STD_ON for the approved
+      Core1 / Release configuration. This enabled DET module setting
+      does not by itself indicate that the complete application is
+      built in Debug mode.
+
+  - id: "REL-002"
+    macro: "DET_ENABLED"
+    expected_state: "Enabled"
+    description: >
+      Development Error Tracer support is enabled for the approved
+      Core1 / Release configuration.
+
+  - id: "REL-003"
+    macro: "DCM_STATE_SECURITY_ENABLED"
+    expected_state: "Enabled"
+    description: >
+      Diagnostic security-state support is enabled for the approved
+      Core1 / Release configuration.
+
+  - id: "REL-004"
+    macro: "DEM_FEATURE_NEED_TIME_SERIES"
+    expected_state: "Disabled"
+    description: >
+      Time-series support is disabled because the related future and
+      past time-series configuration switches are disabled.
+
+  - id: "REL-005"
+    macro: "DRVRTRENC_DEBUG_ENABLE"
+    expected_state: "Disabled"
+    description: >
+      DrvRtrEnc debug support is configured as STD_OFF for the
+      Core1 / Release configuration.
+
+  - id: "REL-006"
+    macro: "KC_DEF_SUPPORT_TESTMODE"
+    expected_state: "Enabled"
+    description: >
+      KostiaCom test-mode support is intentionally enabled by the
+      approved Core1 module configuration.
+
+  - id: "REL-007"
+    macro: "RAMTEST_USE_DCD"
+    expected_state: "Disabled"
+    description: >
+      RAM test DCD support is configured as STD_OFF for the Core1 /
+      Release configuration.
+
+  - id: "REL-008"
+    macro: "RAMTEST_DEV_ERROR_DETECT"
+    expected_state: "Enabled"
+    description: >
+      RAM test development-error detection is intentionally enabled
+      by the Core1 / Release module configuration.
+
+  - id: "REL-009"
+    macro: "ROMTEST_USE_DCD"
+    expected_state: "Disabled"
+    description: >
+      ROM test DCD support is configured as STD_OFF for the Core1 /
+      Release configuration.
+
+  - id: "REL-010"
+    macro: "ROMTEST_USE_DET"
+    expected_state: "Enabled"
+    description: >
+      ROM test DET reporting support is enabled for the Core1 /
+      Release configuration.
+
+  - id: "REL-011"
+    macro: "DCM_DEBUG_SECURITY_EVENT_REPORT_ENABLED"
+    expected_state: "Disabled"
+    description: >
+      DCM debug security-event reporting is configured as STD_OFF
+      for the Core1 / Release configuration.
+
+  - id: "REL-012"
+    macro: "DCM_DEBUG_SECURITY_EVENT_WITH_CONTEXT_DATA_ENABLED"
+    expected_state: "Disabled"
+    description: >
+      DCM debug security-event reporting with context data is
+      configured as STD_OFF for Core1 / Release.
+
+  - id: "REL-013"
+    macro: "BSWM_DCMAPPLUPDATESTATE"
+    expected_state: "Disabled"
+    description: >
+      No BswM DCM Application Updated Indication mode request is
+      configured; the related feature remains disabled.
+
+  - id: "REL-014"
+    macro: "CRYPTO_30_LIBCV_SHE_DEBUG_CMD"
+    expected_state: "Disabled"
+    description: >
+      The SHE debug command is configured as STD_OFF and excluded
+      from the Core1 / Release build.
+
+  - id: "REL-015"
+    macro: "DEM_CFG_DATA_CYCLES_TESTED_SINCE_FIRST_FAILED"
+    expected_state: "Disabled"
+    description: >
+      No DEM internal-data element for cycles tested since first
+      failed is configured for Core1 / Release.
+
+  - id: "REL-016"
+    macro: "DEM_CFG_DATA_CYCLES_TESTED_SINCE_LAST_FAILED"
+    expected_state: "Disabled"
+    description: >
+      No DEM internal-data element for cycles tested since last
+      failed is configured for Core1 / Release.
+
+  - id: "REL-017"
+    macro: "DEM_CFG_SUPPORT_TESTFAILED_STORAGE"
+    expected_state: "Enabled"
+    description: >
+      Storage of the DEM TestFailed status bit is intentionally
+      enabled by the Core1 / Release module configuration.
+
+  - id: "REL-018"
+    macro: "DEM_CFG_SUPPORT_WWHOBD"
+    expected_state: "Disabled"
+    description: >
+      WWH-OBD support is configured as STD_OFF for the Core1 /
+      Release configuration.
+
+  - id: "REL-019"
+    macro: "DEM_CFG_SUPPORT_CLEAR_TESTFAILED_ON_OPCYCLE"
+    expected_state: "Disabled"
+    description: >
+      Clear-TestFailed-on-operation-cycle support is configured as
+      STD_OFF for Core1 / Release.
+
+  - id: "REL-020"
+    macro: "DEM_CFG_CAPTURE_EXTDATA_TESTFAILED"
+    expected_state: "Disabled"
+    description: >
+      Extended-data capture triggered by DEM_TRIGGER_TESTFAILED is
+      not enabled for Core1 / Release.
+
+  - id: "REL-021"
+    macro: "DEM_CFG_CAPTURE_FREEZEF_TESTFAILED"
+    expected_state: "Disabled"
+    description: >
+      Freeze-frame capture triggered by DEM_TRIGGER_TESTFAILED is
+      not enabled for Core1 / Release.
+
+  - id: "REL-022"
+    macro: "DEM_CFG_AGING_NEXT_TESTS_TFTOC"
+    expected_state: "Enabled"
+    description: >
+      The DEM aging next-test TFTOC configuration is enabled for the
+      approved Core1 / Release configuration.
+
+  - id: "REL-023"
+    macro: "DEM_CFG_AGING_START_TESTS_TFTOC"
+    expected_state: "Enabled"
+    description: >
+      The DEM aging start-test TFTOC configuration is enabled for the
+      approved Core1 / Release configuration.
+
+  - id: "REL-024"
+    macro: "VMEMACCM_COMPONENT_TEST"
+    expected_state: "Undefined"
+    description: >
+      VMEMACCM_COMPONENT_TEST is not defined for the approved Core1 /
+      Release configuration. Generic MemMap component-test blocks must
+      remain disabled.
+
+  - id: "REL-025"
+    macro: "DET_REGRESSION_TEST"
+    expected_state: "Undefined"
+    description: >
+      DET_REGRESSION_TEST is not defined for the approved Core1 /
+      Release configuration. Coverage annotations must not enable
+      regression-test mode.
+
+  - id: "REL-026"
+    macro: "DEBUG_PORT_SLEEPCCW_ACTIV"
+    expected_state: "Undefined"
+    description: >
+      DEBUG_PORT_SLEEPCCW_ACTIV is commented out and not defined for
+      the approved Core1 / Release configuration.
+
+  - id: "REL-027"
+    macro: "INTEGRATION_TEST_VARM_TASK_PERIOD"
+    expected_state: "Undefined"
+    description: >
+      INTEGRATION_TEST_VARM_TASK_PERIOD is not defined for Core1 /
+      Release; the related VarM integration-test blocks remain
+      disabled.
+
+  - id: "REL-028"
+    macro: "DCM_NOUNIT_DEBUG"
+    expected_state: "Undefined"
+    description: >
+      DCM_NOUNIT_DEBUG is not defined for the approved Core1 /
+      Release configuration. The negated preprocessor condition
+      remains active as expected.
+
+  - id: "REL-029"
+    macro: "CRYPTO_30_LIBCV_KEYELEMENTSDEBUGGERPROTECTIONIDXOFSHEPAGE"
+    expected_state: "Undefined"
+    description: >
+      The Crypto LibCv key-elements debugger-protection macro is not
+      defined as an active Core1 / Release configuration switch.
+
+  - id: "REL-030"
+    macro: "RAMTEST_IMMEDIATE_SECTIONS_NUM"
+    expected_value: "0"
+    description: >
+      No immediate RAM test sections are configured for the approved
+      Core1 / Release configuration.
+
+  - id: "REL-032"
+    macro: "WDGM_TEST_ENABLED"
+    expected_value: "WDGM_TEST_ENABLED_Startup"
+    description: >
+      Watchdog Manager test configuration selects the Startup test
+      mode for the approved Core1 / Release configuration.
+
+
+expression_rules:
+  - id: "REL-033"
+    expression: >
+      (DET_DEBUG_ENABLED == STD_ON) &&
+      (DET_DLTFILTERSIZE > 0)
+    expected_result: false
+    description: >
+      DET DLT-filter dependent conditional code must remain inactive
+      for Core1 / Release because DET_DLTFILTERSIZE is configured as
+      zero.

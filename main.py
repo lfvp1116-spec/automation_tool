@@ -10,7 +10,6 @@ from src.conditional_macro_indexer import (
 from src.conditional_macro_parser import (
     extract_conditional_macro_definitions,
 )
-
 from src.execution_logger import write_execution_log
 from src.macro_indexer import (
     build_project_macro_index,
@@ -25,6 +24,16 @@ from src.preprocessor_evaluation_service import (
 )
 from src.preprocessor_parser import find_preprocessor_directives
 from src.report_generator import generate_excel_report
+
+from src.rule_config_loader import (
+    load_expected_rules,
+    load_expression_rules,
+)
+
+from src.rule_engine import (
+    evaluate_rules,
+    summarize_rule_verdicts,
+)
 from src.source_scanner import find_source_files
 from src.switch_classifier import (
     classify_preprocessor_finding,
@@ -33,8 +42,15 @@ from src.unresolved_expression_summary import (
     summarize_unresolved_expressions,
 )
 
+from src.expression_rule_engine import (
+    evaluate_expression_rules,
+)
 
 CONFIGURATION_PATH = Path("config/project_paths.yaml")
+
+EXPECTED_RULES_PATH = Path(
+    "config/expected_rules.yaml"
+)
 
 OUTPUT_DIRECTORY = Path("output")
 REPORT_PATH = OUTPUT_DIRECTORY / "compiler_switches_report.xlsx"
@@ -248,6 +264,14 @@ def main() -> None:
         CONFIGURATION_PATH
     )
 
+    expected_rules = load_expected_rules(
+        EXPECTED_RULES_PATH
+    )
+
+    expression_rules = load_expression_rules(
+        EXPECTED_RULES_PATH
+    )
+
     project_name = str(
         configuration["project_name"]
     )
@@ -314,9 +338,8 @@ def main() -> None:
         makefiles_data=parsed_makefiles,
     )
 
-    # Second pass: discover #define records inside #if/#elif/#else
-    # branches and keep only definitions whose branch is active for
-    # the selected Core1 / Release configuration.
+    # Second pass: find #define records inside #if/#elif/#else
+    # branches and retain only definitions whose branch is active.
     active_conditional_macro_records = []
 
     for source_file in source_files:
@@ -334,7 +357,7 @@ def main() -> None:
         )
 
     # Final index: normal definitions plus active conditional
-    # definitions. Conditional records have higher priority.
+    # definitions. Conditional definitions have higher priority.
     macro_index = (
         merge_macro_index_with_active_conditional_definitions(
             base_macro_index=base_macro_index,
@@ -368,6 +391,25 @@ def main() -> None:
             findings=findings,
             macro_index=macro_index,
         )
+    )
+
+    macro_rule_results = evaluate_rules(
+        rules=expected_rules,
+        macro_resolutions=macro_resolution_results,
+    )
+
+    expression_rule_results = evaluate_expression_rules(
+        rules=expression_rules,
+        expression_evaluations=expression_evaluation_results,
+    )
+
+    rule_results = [
+        *macro_rule_results,
+        *expression_rule_results,
+    ]
+
+    rule_summary = summarize_rule_verdicts(
+        rule_results
     )
 
     unresolved_expression_summary = (
@@ -437,6 +479,41 @@ def main() -> None:
     )
 
     print(
+        "Rules evaluated: "
+        f"{rule_summary['total_rules']}"
+    )
+
+    print(
+        "Macro rules evaluated: "
+        f"{len(macro_rule_results)}"
+    )
+
+    print(
+        "Expression rules evaluated: "
+        f"{len(expression_rule_results)}"
+    )
+
+    print(
+        "Rule verdicts - PASS: "
+        f"{rule_summary['pass_count']}"
+    )
+
+    print(
+        "Rule verdicts - FAIL: "
+        f"{rule_summary['fail_count']}"
+    )
+
+    print(
+        "Rule verdicts - REVIEW: "
+        f"{rule_summary['review_count']}"
+    )
+
+    print(
+        "Rule verdicts - NOT_APPLICABLE: "
+        f"{rule_summary['not_applicable_count']}"
+    )
+
+    print(
         "Relevant expressions evaluated: "
         f"{len(evaluated_expressions)} / "
         f"{len(expression_evaluation_results)}"
@@ -476,6 +553,8 @@ def main() -> None:
         unresolved_expression_summary=(
             unresolved_expression_summary
         ),
+        rule_results=rule_results,
+        rule_summary=rule_summary,
     )
 
     generated_log_path = write_execution_log(
