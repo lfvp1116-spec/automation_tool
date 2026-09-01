@@ -46,6 +46,11 @@ from src.expression_rule_engine import (
     evaluate_expression_rules,
 )
 
+from src.macro_verdict_coverage import (
+    build_macro_verdict_coverage,
+    summarize_macro_verdict_coverage,
+)
+
 CONFIGURATION_PATH = Path("config/project_paths.yaml")
 
 EXPECTED_RULES_PATH = Path(
@@ -412,6 +417,19 @@ def main() -> None:
         rule_results
     )
 
+    macro_verdict_coverage = (
+            build_macro_verdict_coverage(
+                macro_resolutions=macro_resolution_results,
+                rule_results=rule_results,
+            )
+        )
+
+    macro_coverage_summary = (
+        summarize_macro_verdict_coverage(
+            macro_verdict_coverage
+        )
+    )
+
     unresolved_expression_summary = (
         summarize_unresolved_expressions(
             expression_evaluations=(
@@ -493,6 +511,37 @@ def main() -> None:
         f"{len(expression_rule_results)}"
     )
 
+    covered_macros = [
+        item
+        for item in macro_verdict_coverage
+        if item["coverage_status"] == "Rule configured"
+    ]
+
+    uncovered_macros = [
+        item
+        for item in macro_verdict_coverage
+        if (
+            item["coverage_status"]
+            == "No approved macro rule configured"
+        )
+    ]
+
+    print(
+        "Relevant macros covered by rules: "
+        f"{macro_coverage_summary['covered_macros']} / "
+        f"{macro_coverage_summary['total_macros']}"
+    )
+
+    print(
+        "Relevant macros without approved rules: "
+        f"{macro_coverage_summary['uncovered_macros']}"
+    )
+
+    print(
+        "Macro rule coverage percentage: "
+        f"{macro_coverage_summary['coverage_percentage']}%"
+    )
+
     print(
         "Rule verdicts - PASS: "
         f"{rule_summary['pass_count']}"
@@ -555,6 +604,8 @@ def main() -> None:
         ),
         rule_results=rule_results,
         rule_summary=rule_summary,
+        macro_verdict_coverage=macro_verdict_coverage,
+        macro_coverage_summary=macro_coverage_summary,
     )
 
     generated_log_path = write_execution_log(

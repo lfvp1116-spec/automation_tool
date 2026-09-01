@@ -256,3 +256,30 @@ expression_rules:
       DET DLT-filter dependent conditional code must remain inactive
       for Core1 / Release because DET_DLTFILTERSIZE is configured as
       zero.
+
+  - id: "REL-034"
+    expression: >
+      (((DEM_CFG_PROCESS_OCCTR_CONFIRMED +
+      DEM_CFG_PROCESS_OCCTR_TESTFAILED) > STD_ON) ||
+      (DEM_CFG_PROCESS_OCCTR_CONFIRMED +
+      DEM_CFG_PROCESS_OCCTR_TESTFAILED) == STD_OFF)
+    expected_result: false
+    description: >
+      DEM occurrence-counter processing is configured with
+      DEM_CFG_PROCESS_OCCTR_CONFIRMED as STD_OFF and
+      DEM_CFG_PROCESS_OCCTR_TESTFAILED as STD_ON. Their sum equals
+      STD_ON; therefore, the condition requiring a value greater than
+      STD_ON or equal to STD_OFF must remain inactive for Core1 /
+      Release.
+
+  - id: "REL-035"
+    expression: >
+      ((DEM_FEATURE_NEED_STATISTICAL_DATA == STD_ON) ||
+      (DEM_FEATURE_NEED_EMISSIONOBD == STD_ON)) &&
+      ((DEM_CFG_DATA_CYCLES_TESTED_SINCE_LAST_FAILED == STD_ON) ||
+      (DEM_CFG_DATA_HEALINGCTR_DOWNCNT == STD_ON))
+    expected_result: false
+    description: >
+      DEM statistics conditional code must remain inactive for Core1 /
+      Release because the required cycles-tested-since-last-failed or
+      healing-counter-downcount configuration is not enabled.

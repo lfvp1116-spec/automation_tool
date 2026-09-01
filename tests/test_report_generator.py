@@ -116,6 +116,7 @@ def test_generate_excel_report_with_controlled_data(
         "Expression Evaluation",
         "Unresolved Expr Summary",
         "Rule Verdicts",
+        "Macro Verdict Coverage",
     ]
 
     summary_sheet = workbook["Summary"]
@@ -154,6 +155,10 @@ def test_generate_excel_report_with_controlled_data(
 
     rule_verdicts_sheet = workbook[
         "Rule Verdicts"
+    ]
+
+    macro_verdict_coverage_sheet = workbook[
+        "Macro Verdict Coverage"
     ]
 
     assert summary_sheet["A1"].value == "Metric"
@@ -309,47 +314,77 @@ def test_generate_excel_report_with_controlled_data(
 
     assert (
         rule_verdicts_sheet["B1"].value
-        == "Macro"
+        == "Rule Type"
     )
 
     assert (
-        rule_verdicts_sheet["D1"].value
+        rule_verdicts_sheet["C1"].value
+        == "Macro / Expression"
+    )
+
+    assert (
+        rule_verdicts_sheet["E1"].value
         == "Expected State"
     )
 
     assert (
-    rule_verdicts_sheet["E1"].value
-    == "Expected Value"
+        rule_verdicts_sheet["F1"].value
+        == "Expected Value"
     )
 
     assert (
-        rule_verdicts_sheet["I1"].value
+        rule_verdicts_sheet["G1"].value
+        == "Expected Result"
+    )
+
+    assert (
+        rule_verdicts_sheet["N1"].value
         == "Verdict"
     )
 
     assert (
-        rule_verdicts_sheet["J1"].value
+        rule_verdicts_sheet["O1"].value
         == "Reason"
     )
 
     assert (
-        rule_verdicts_sheet["K1"].value
+        rule_verdicts_sheet["P1"].value
         == "Resolution Chain"
     )
 
     assert (
-        rule_verdicts_sheet["L1"].value
+        rule_verdicts_sheet["Q1"].value
         == "Primary Definition Source"
     )
 
     assert (
-        rule_verdicts_sheet["P1"].value
+        rule_verdicts_sheet["U1"].value
         == "Primary Definition Condition"
     )
 
     assert (
-        rule_verdicts_sheet["S1"].value
+        rule_verdicts_sheet["X1"].value
         == "Primary Definition Selection Reason"
+    )
+
+    assert (
+        macro_verdict_coverage_sheet["A1"].value
+        == "Category"
+    )
+
+    assert (
+        macro_verdict_coverage_sheet["B1"].value
+        == "Macro"
+    )
+
+    assert (
+        macro_verdict_coverage_sheet["K1"].value
+        == "Rule Verdict"
+    )
+
+    assert (
+        macro_verdict_coverage_sheet["L1"].value
+        == "Coverage Status"
     )
 
     workbook.close()
@@ -444,6 +479,12 @@ def test_summary_includes_classification_metrics(
         findings=classified_findings,
         expression_evaluations=expression_evaluations,
         rule_summary=rule_summary,
+        macro_coverage_summary={
+            "total_macros": 4,
+            "covered_macros": 2,
+            "uncovered_macros": 2,
+            "coverage_percentage": 50.0,
+        },
     )
 
     workbook = load_workbook(
@@ -517,6 +558,21 @@ def test_summary_includes_classification_metrics(
         summary_sheet,
         "Rule verdicts - NOT_APPLICABLE",
     ) == 1
+
+    assert get_summary_value(
+        summary_sheet,
+        "Relevant macros covered by rules",
+    ) == 2
+
+    assert get_summary_value(
+        summary_sheet,
+        "Relevant macros without approved rules",
+    ) == 2
+
+    assert get_summary_value(
+        summary_sheet,
+        "Macro rule coverage percentage",
+    ) == 50.0
 
     assert get_summary_value(
         summary_sheet,
@@ -935,8 +991,8 @@ def test_rule_verdicts_sheet_writes_rule_results(
     tmp_path: Path,
 ) -> None:
     """
-    Verifies that configured rule results are written to the
-    Rule Verdicts worksheet.
+    Verifies that macro-rule results are written to the Rule Verdicts
+    worksheet with the expected evidence columns.
     """
 
     report_path = (
@@ -947,10 +1003,16 @@ def test_rule_verdicts_sheet_writes_rule_results(
     rule_results = [
         {
             "rule_id": "RULE-001",
+            "rule_type": "Macro",
             "macro": "FEATURE_X",
             "description": "Feature X must be enabled.",
             "expected_state": "Enabled",
+            "expected_value": "",
+            "expected_result": "",
             "actual_state": "Enabled",
+            "actual_result": "",
+            "occurrences": "",
+            "files_affected": "",
             "resolved_value": "1u",
             "resolution_status": "Resolved",
             "verdict": "PASS",
@@ -979,10 +1041,16 @@ def test_rule_verdicts_sheet_writes_rule_results(
         },
         {
             "rule_id": "RULE-002",
+            "rule_type": "Macro",
             "macro": "FEATURE_Y",
             "description": "Feature Y must be disabled.",
             "expected_state": "Disabled",
+            "expected_value": "",
+            "expected_result": "",
             "actual_state": "Enabled",
+            "actual_result": "",
+            "occurrences": "",
+            "files_affected": "",
             "resolved_value": "1u",
             "resolution_status": "Resolved",
             "verdict": "FAIL",
@@ -1023,56 +1091,185 @@ def test_rule_verdicts_sheet_writes_rule_results(
 
     assert worksheet.max_row == 3
 
+    # First macro rule.
     assert worksheet["A2"].value == "RULE-001"
-    assert worksheet["B2"].value == "FEATURE_X"
-    assert worksheet["D2"].value == "Enabled"
+    assert worksheet["B2"].value == "Macro"
+    assert worksheet["C2"].value == "FEATURE_X"
+    assert worksheet["D2"].value == "Feature X must be enabled."
 
-    # Expected Value is empty for a state-based rule.
-    assert worksheet["E2"].value in (None, "")
+    assert worksheet["E2"].value == "Enabled"
+    assert worksheet["F2"].value in (None, "")
+    assert worksheet["G2"].value in (None, "")
 
-    assert worksheet["F2"].value == "Enabled"
-    assert worksheet["G2"].value == "1u"
-    assert worksheet["H2"].value == "Resolved"
-    assert worksheet["I2"].value == "PASS"
+    assert worksheet["H2"].value == "Enabled"
+    assert worksheet["I2"].value in (None, "")
+    assert worksheet["J2"].value in (None, "")
+    assert worksheet["K2"].value in (None, "")
+
+    assert worksheet["L2"].value == "1u"
+    assert worksheet["M2"].value == "Resolved"
+    assert worksheet["N2"].value == "PASS"
+
     assert (
-        worksheet["K2"].value
-        == "FEATURE_X -> STD_ON -> 1u"
+        worksheet["O2"].value
+        == "The actual macro state matches the expected state."
     )
-
-    assert worksheet["L2"].value == "Project_Cfg.h"
-    assert worksheet["M2"].value == 45
-
-    assert (
-        worksheet["N2"].value
-        == "conditional_definition"
-    )
-
-    assert worksheet["O2"].value == 5
 
     assert (
         worksheet["P2"].value
+        == "FEATURE_X -> STD_ON -> 1u"
+    )
+
+    assert worksheet["Q2"].value == "Project_Cfg.h"
+    assert worksheet["R2"].value == 45
+
+    assert (
+        worksheet["S2"].value
+        == "conditional_definition"
+    )
+
+    assert worksheet["T2"].value == 5
+
+    assert (
+        worksheet["U2"].value
         == "FEATURE_SELECTOR == STD_ON"
     )
 
     assert (
-        worksheet["Q2"].value
+        worksheet["V2"].value
         == "1u == 1u"
     )
 
-    assert worksheet["R2"].value == "True"
+    assert worksheet["W2"].value == "True"
 
     assert (
-        worksheet["S2"].value
+        worksheet["X2"].value
         == "Conditional branch evaluated as active"
     )
 
-    assert (
-        worksheet["J2"].value
-        == "The actual macro state matches the expected state."
+    # Second macro rule.
+    assert worksheet["A3"].value == "RULE-002"
+    assert worksheet["B3"].value == "Macro"
+    assert worksheet["C3"].value == "FEATURE_Y"
+    assert worksheet["E3"].value == "Disabled"
+    assert worksheet["H3"].value == "Enabled"
+    assert worksheet["N3"].value == "FAIL"
+
+    workbook.close()
+
+def test_macro_verdict_coverage_sheet_writes_coverage_rows(
+    tmp_path: Path,
+) -> None:
+    """
+    Verifies that Macro Verdict Coverage writes rule coverage for
+    configured and non-configured macros.
+    """
+
+    report_path = (
+        tmp_path
+        / "macro_verdict_coverage_report.xlsx"
     )
 
-    assert worksheet["A3"].value == "RULE-002"
-    assert worksheet["B3"].value == "FEATURE_Y"
-    assert worksheet["I3"].value == "FAIL"
+    coverage_rows = [
+        {
+            "category": "DEBUG",
+            "macro": "DET_DEBUG_ENABLED",
+            "occurrences": 15,
+            "files_affected": 2,
+            "actual_state": "Enabled",
+            "resolved_value": "1u",
+            "resolution_status": "Resolved",
+            "rule_id": "REL-001",
+            "expected_state": "Enabled",
+            "expected_value": "",
+            "rule_verdict": "PASS",
+            "coverage_status": "Rule configured",
+            "reason": (
+                "The actual macro state matches the expected state."
+            ),
+            "resolution_chain": (
+                "DET_DEBUG_ENABLED -> STD_ON -> 1u"
+            ),
+            "primary_definition_source": "Det_Cfg.h",
+            "primary_definition_line": 62,
+            "primary_definition_source_type": (
+                "conditional_definition"
+            ),
+        },
+        {
+            "category": "FEATURE",
+            "macro": "VSECPRIM_AES128_ENABLED",
+            "occurrences": 4,
+            "files_affected": 2,
+            "actual_state": "Enabled",
+            "resolved_value": "1u",
+            "resolution_status": "Resolved",
+            "rule_id": "",
+            "expected_state": "",
+            "expected_value": "",
+            "rule_verdict": "NOT_APPLICABLE",
+            "coverage_status": (
+                "No approved macro rule configured"
+            ),
+            "reason": (
+                "No approved macro rule is configured for this "
+                "relevant macro."
+            ),
+            "resolution_chain": (
+                "VSECPRIM_AES128_ENABLED -> STD_ON -> 1u"
+            ),
+            "primary_definition_source": "ESLib_Cfg.h",
+            "primary_definition_line": 120,
+            "primary_definition_source_type": (
+                "project_source"
+            ),
+        },
+    ]
+
+    generated_report_path = generate_excel_report(
+        output_path=report_path,
+        project_name="Coverage_Project",
+        core="Core1",
+        build_mode="Release",
+        project_root=get_project_root(),
+        makefile_data={},
+        source_file_count=1,
+        findings=[],
+        macro_verdict_coverage=coverage_rows,
+    )
+
+    workbook = load_workbook(
+        generated_report_path,
+        read_only=True,
+    )
+
+    worksheet = workbook[
+        "Macro Verdict Coverage"
+    ]
+
+    assert worksheet.max_row == 3
+
+    assert worksheet["A1"].value == "Category"
+    assert worksheet["B1"].value == "Macro"
+    assert worksheet["H1"].value == "Rule ID"
+    assert worksheet["K1"].value == "Rule Verdict"
+    assert worksheet["L1"].value == "Coverage Status"
+
+    assert worksheet["A2"].value == "DEBUG"
+    assert worksheet["B2"].value == "DET_DEBUG_ENABLED"
+    assert worksheet["H2"].value == "REL-001"
+    assert worksheet["I2"].value == "Enabled"
+    assert worksheet["K2"].value == "PASS"
+    assert worksheet["L2"].value == "Rule configured"
+
+    assert worksheet["A3"].value == "FEATURE"
+    assert worksheet["B3"].value == "VSECPRIM_AES128_ENABLED"
+    assert worksheet["H3"].value in (None, "")
+    assert worksheet["K3"].value == "NOT_APPLICABLE"
+
+    assert (
+        worksheet["L3"].value
+        == "No approved macro rule configured"
+    )
 
     workbook.close()

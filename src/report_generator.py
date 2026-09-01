@@ -47,6 +47,10 @@ def generate_excel_report(
     ) = None,
     rule_results: Iterable[dict[str, Any]] | None = None,
     rule_summary: dict[str, int] | None = None,
+    macro_verdict_coverage: (
+        Iterable[dict[str, Any]] | None
+    ) = None,
+    macro_coverage_summary: dict[str, int | float] | None = None,
 ) -> Path:
     """
     Generates an Excel report with:
@@ -79,6 +83,20 @@ def generate_excel_report(
 
     rule_results_list = list(
         rule_results or []
+    )
+
+    macro_verdict_coverage_list = list(
+        macro_verdict_coverage or []
+    )
+
+    normalized_macro_coverage_summary = (
+        macro_coverage_summary
+        or {
+            "total_macros": 0,
+            "covered_macros": 0,
+            "uncovered_macros": 0,
+            "coverage_percentage": 0.0,
+        }
     )
 
     normalized_rule_summary = rule_summary or {
@@ -130,6 +148,10 @@ def generate_excel_report(
         title="Rule Verdicts"
     )
 
+    macro_verdict_coverage_sheet = workbook.create_sheet(
+        title="Macro Verdict Coverage"
+    )
+
     _write_summary_sheet(
         worksheet=summary_sheet,
         project_name=project_name,
@@ -140,6 +162,9 @@ def generate_excel_report(
         findings=findings_list,
         expression_evaluations=expression_evaluations_list,
         rule_summary=normalized_rule_summary,
+        macro_coverage_summary=(
+            normalized_macro_coverage_summary
+        ),
     )
 
     _write_compiler_switches_sheet(
@@ -196,6 +221,11 @@ def generate_excel_report(
         rule_results=rule_results_list,
     )
 
+    _write_macro_verdict_coverage_sheet(
+        worksheet=macro_verdict_coverage_sheet,
+        coverage_rows=macro_verdict_coverage_list,
+    )
+
     workbook.save(output_path)
     workbook.close()
 
@@ -234,6 +264,7 @@ def _write_summary_sheet(
     findings: list[dict[str, Any]],
     expression_evaluations: list[dict[str, Any]],
     rule_summary: dict[str, int],
+    macro_coverage_summary: dict[str, int | float],
 ) -> None:
     """
     Writes the Summary worksheet with project metadata, global
@@ -364,6 +395,18 @@ def _write_summary_sheet(
         (
             "Rule verdicts - NOT_APPLICABLE",
             rule_summary["not_applicable_count"],
+        ),
+                (
+            "Relevant macros covered by rules",
+            macro_coverage_summary["covered_macros"],
+        ),
+        (
+            "Relevant macros without approved rules",
+            macro_coverage_summary["uncovered_macros"],
+        ),
+        (
+            "Macro rule coverage percentage",
+            macro_coverage_summary["coverage_percentage"],
         ),
     ]
 
@@ -1891,17 +1934,22 @@ def _write_rule_verdicts_sheet(
     rule_results: list[dict[str, Any]],
 ) -> None:
     """
-    Writes configured-rule results with verdicts and macro-resolution
-    evidence for technical traceability.
+    Writes macro and expression rule results with verdicts and
+    technical evidence.
     """
 
     headers = [
         "Rule ID",
-        "Macro",
+        "Rule Type",
+        "Macro / Expression",
         "Description",
         "Expected State",
         "Expected Value",
+        "Expected Result",
         "Actual State",
+        "Actual Result",
+        "Occurrences",
+        "Files Affected",
         "Resolved Value",
         "Resolution Status",
         "Verdict",
@@ -1934,60 +1982,85 @@ def _write_rule_verdicts_sheet(
         worksheet.cell(
             row=row_number,
             column=2,
-            value=str(result.get("macro", "")),
+            value=str(result.get("rule_type", "Macro")),
         )
         worksheet.cell(
             row=row_number,
             column=3,
-            value=str(result.get("description", "")),
+            value=str(result.get("macro", "")),
         )
         worksheet.cell(
             row=row_number,
             column=4,
-            value=str(result.get("expected_state", "")),
+            value=str(result.get("description", "")),
         )
         worksheet.cell(
             row=row_number,
             column=5,
-            value=str(result.get("expected_value", "")),
+            value=str(result.get("expected_state", "")),
         )
         worksheet.cell(
             row=row_number,
             column=6,
-            value=str(result.get("actual_state", "")),
+            value=str(result.get("expected_value", "")),
         )
         worksheet.cell(
             row=row_number,
             column=7,
-            value=str(result.get("resolved_value", "")),
+            value=str(result.get("expected_result", "")),
         )
         worksheet.cell(
             row=row_number,
             column=8,
+            value=str(result.get("actual_state", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=9,
+            value=str(result.get("actual_result", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=10,
+            value=result.get("occurrences", ""),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=11,
+            value=result.get("files_affected", ""),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=12,
+            value=str(result.get("resolved_value", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=13,
             value=str(
                 result.get("resolution_status", "")
             ),
         )
         worksheet.cell(
             row=row_number,
-            column=9,
+            column=14,
             value=str(result.get("verdict", "")),
         )
         worksheet.cell(
             row=row_number,
-            column=10,
+            column=15,
             value=str(result.get("reason", "")),
         )
         worksheet.cell(
             row=row_number,
-            column=11,
+            column=16,
             value=str(
                 result.get("resolution_chain", "")
             ),
         )
         worksheet.cell(
             row=row_number,
-            column=12,
+            column=17,
             value=str(
                 result.get(
                     "primary_definition_source",
@@ -1997,7 +2070,7 @@ def _write_rule_verdicts_sheet(
         )
         worksheet.cell(
             row=row_number,
-            column=13,
+            column=18,
             value=result.get(
                 "primary_definition_line",
                 "",
@@ -2005,7 +2078,7 @@ def _write_rule_verdicts_sheet(
         )
         worksheet.cell(
             row=row_number,
-            column=14,
+            column=19,
             value=str(
                 result.get(
                     "primary_definition_source_type",
@@ -2015,7 +2088,7 @@ def _write_rule_verdicts_sheet(
         )
         worksheet.cell(
             row=row_number,
-            column=15,
+            column=20,
             value=result.get(
                 "primary_definition_priority",
                 "",
@@ -2023,7 +2096,7 @@ def _write_rule_verdicts_sheet(
         )
         worksheet.cell(
             row=row_number,
-            column=16,
+            column=21,
             value=str(
                 result.get(
                     "primary_definition_condition",
@@ -2034,7 +2107,7 @@ def _write_rule_verdicts_sheet(
         )
         worksheet.cell(
             row=row_number,
-            column=17,
+            column=22,
             value=str(
                 result.get(
                     "resolved_primary_definition_condition",
@@ -2045,7 +2118,7 @@ def _write_rule_verdicts_sheet(
         )
         worksheet.cell(
             row=row_number,
-            column=18,
+            column=23,
             value=_format_optional_boolean(
                 result.get(
                     "primary_definition_condition_evaluation"
@@ -2054,7 +2127,7 @@ def _write_rule_verdicts_sheet(
         )
         worksheet.cell(
             row=row_number,
-            column=19,
+            column=24,
             value=str(
                 result.get(
                     "primary_definition_selection_reason",
@@ -2068,23 +2141,206 @@ def _write_rule_verdicts_sheet(
         worksheet=worksheet,
         column_widths={
             "A": 16,
-            "B": 58,
-            "C": 75,
-            "D": 20,
-            "E": 38,
-            "F": 20,
-            "G": 18,
-            "H": 38,
+            "B": 18,
+            "C": 95,
+            "D": 75,
+            "E": 20,
+            "F": 38,
+            "G": 20,
+            "H": 20,
             "I": 20,
-            "J": 75,
-            "K": 75,
-            "L": 85,
-            "M": 16,
-            "N": 28,
-            "O": 18,
-            "P": 95,
-            "Q": 95,
-            "R": 28,
-            "S": 45,
+            "J": 14,
+            "K": 16,
+            "L": 18,
+            "M": 38,
+            "N": 20,
+            "O": 75,
+            "P": 75,
+            "Q": 85,
+            "R": 16,
+            "S": 28,
+            "T": 18,
+            "U": 95,
+            "V": 95,
+            "W": 28,
+            "X": 45,
+        },
+    )
+
+def _write_macro_verdict_coverage_sheet(
+    worksheet: Worksheet,
+    coverage_rows: list[dict[str, Any]],
+) -> None:
+    """
+    Writes one row per relevant unique macro.
+
+    The worksheet indicates whether a macro has an approved rule and
+    shows PASS, FAIL, REVIEW, or NOT_APPLICABLE coverage status.
+    """
+
+    headers = [
+        "Category",
+        "Macro",
+        "Occurrences",
+        "Files Affected",
+        "Actual State",
+        "Resolved Value",
+        "Resolution Status",
+        "Rule ID",
+        "Expected State",
+        "Expected Value",
+        "Rule Verdict",
+        "Coverage Status",
+        "Reason",
+        "Resolution Chain",
+        "Primary Definition Source",
+        "Primary Definition Line",
+        "Primary Definition Source Type",
+    ]
+
+    _write_headers(
+        worksheet=worksheet,
+        headers=headers,
+    )
+
+    for row_number, row_data in enumerate(
+        coverage_rows,
+        start=2,
+    ):
+        worksheet.cell(
+            row=row_number,
+            column=1,
+            value=str(row_data.get("category", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=2,
+            value=str(row_data.get("macro", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=3,
+            value=row_data.get("occurrences", 0),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=4,
+            value=row_data.get("files_affected", 0),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=5,
+            value=str(
+                row_data.get("actual_state", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=6,
+            value=str(
+                row_data.get("resolved_value", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=7,
+            value=str(
+                row_data.get("resolution_status", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=8,
+            value=str(row_data.get("rule_id", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=9,
+            value=str(
+                row_data.get("expected_state", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=10,
+            value=str(
+                row_data.get("expected_value", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=11,
+            value=str(
+                row_data.get("rule_verdict", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=12,
+            value=str(
+                row_data.get("coverage_status", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=13,
+            value=str(row_data.get("reason", "")),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=14,
+            value=str(
+                row_data.get("resolution_chain", "")
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=15,
+            value=str(
+                row_data.get(
+                    "primary_definition_source",
+                    "",
+                )
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=16,
+            value=row_data.get(
+                "primary_definition_line",
+                "",
+            ),
+        )
+        worksheet.cell(
+            row=row_number,
+            column=17,
+            value=str(
+                row_data.get(
+                    "primary_definition_source_type",
+                    "",
+                )
+            ),
+        )
+
+    _format_table(
+        worksheet=worksheet,
+        column_widths={
+            "A": 18,
+            "B": 58,
+            "C": 14,
+            "D": 16,
+            "E": 20,
+            "F": 18,
+            "G": 38,
+            "H": 16,
+            "I": 20,
+            "J": 38,
+            "K": 20,
+            "L": 38,
+            "M": 75,
+            "N": 75,
+            "O": 85,
+            "P": 16,
+            "Q": 28,
         },
     )
