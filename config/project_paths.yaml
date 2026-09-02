@@ -1,37 +1,142 @@
-# Project information
+# ============================================================
+# AUTOMATION TOOL - PROJECT AND TEST REPORT CONFIGURATION
+# ============================================================
+#
+# This file contains the project-specific configuration.
+#
+# When analyzing a different project, update the sections:
+# - project information
+# - test_report
+# - makefiles
+# - source_paths
+# - extensions
+# - exclude_paths
+#
+# Expected macro and expression rules are configured separately in:
+# config/expected_rules.yaml
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. PROJECT INFORMATION
+# ------------------------------------------------------------
+# These values identify the project and build variant being analyzed.
+
 project_name: "Release_DMS"
+
+# Absolute path to the root directory of the project to analyze.
 project_root: "C:/Users/valle004/Documents/PROYECTO/REPOS/Release_DMS"
 
-# Target configuration
+# Target software-core configuration.
 core: "Core1"
+
+# Build mode or build variant being analyzed.
 build_mode: "Release"
 
-# Makefiles to analyze
+
+# ------------------------------------------------------------
+# 2. TEST REPORT METADATA
+# ------------------------------------------------------------
+# These values will be used by the formal final test report.
+#
+# The tool will calculate the verdict automatically. Do not add a
+# manual PASS/FAIL verdict here.
+
+test_report:
+  # Identification of the test case or report.
+  test_id: "TSN2001"
+
+  # Main report title.
+  title: "Compiler Switches Configuration"
+
+  # Person who executes the analysis/test.
+  # Change this value when another user runs the tool.
+  executed_by: "Luis Fernando Vallejo Piña"
+
+  # Date shown in the formal report.
+  #
+  # Use "auto" to use the execution date automatically.
+  # Or use a fixed date, for example: "2026-09-01".
+  execution_date: "auto"
+
+  # Target microcontroller or hardware platform.
+  # This field is configurable because it may not be extracted from
+  # every Makefile automatically.
+  mcu: "CYT2B73CAS (CYT2B7 family)"
+
+  # Optional expected compiler name for the formal report.
+  #
+  # The tool also detects compiler information from Makefiles.
+  # Use this field as a readable/project-approved reference.
+  expected_compiler: "IAR C/C++ Compiler for ARM (iccarm.exe)"
+
+  # Test scope/criteria. This is NOT fixed and must be changed when
+  # another project, Core, or build variant is analyzed.
+  test_criteria: >
+    Verify that the C/C++ compiler switches and conditional
+    compilation configuration for the Core1 Release build are
+    appropriate for the selected target and that Release-specific
+    settings are correctly defined.
+
+  # Optional identifier for the project/customer/program.
+  project_identifier: "P09062 DMS"
+
+  # Optional document version for the formal report.
+  document_version: "1.0"
+
+
+# ------------------------------------------------------------
+# 3. MAKEFILES TO ANALYZE
+# ------------------------------------------------------------
+# Paths are relative to project_root.
+
 makefiles:
   - "BuildTools/Core1/Make/config/compile_opt.mk"
   - "BuildTools/Core1/Make/config/project.mk"
 
-# Source directories to scan recursively
+
+# ------------------------------------------------------------
+# 4. SOURCE DIRECTORIES TO SCAN RECURSIVELY
+# ------------------------------------------------------------
+# Paths are relative to project_root.
+
 source_paths:
   - "Source/Core1"
   - "Source/common"
   - "Models/Core1/Common/MCAL/P8242_05_McalCfg_v1190/output/generated/src"
   - "Models/Core1/Common/MCAL/P8242_05_McalCfg_v1190/output/generated/include"
 
-# File extensions allowed for source scanning
+
+# ------------------------------------------------------------
+# 5. ALLOWED SOURCE FILE EXTENSIONS
+# ------------------------------------------------------------
+
 extensions:
   - ".c"
   - ".h"
   - ".cpp"
   - ".hpp"
 
-# Directories excluded from scanning
+
+# ------------------------------------------------------------
+# 6. EXCLUDED PATHS
+# ------------------------------------------------------------
+# Directory names can be excluded anywhere in the path.
+# Relative paths can exclude a specific project subtree.
+
 exclude_paths:
   - "BuildTools"
   - ".metadata"
   - "Source/Core0"
 
-# Initial keyword categories for future classification
+
+# ------------------------------------------------------------
+# 7. INITIAL KEYWORD CATEGORIES
+# ------------------------------------------------------------
+# These are reference categories for switch classification.
+# The current detailed classification rules are implemented in:
+# src/switch_classifier.py
+
 keywords:
   - "DEBUG"
   - "TEST"

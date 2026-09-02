@@ -14,7 +14,7 @@ def build_macro_verdict_coverage(
     Rule Verdicts only.
 
     Macros without an approved macro rule receive:
-    - Verdict: NOT_APPLICABLE
+    - Rule Verdict: NOT_APPLICABLE
     - Coverage Status: No approved macro rule configured
     """
 
@@ -61,6 +61,52 @@ def build_macro_verdict_coverage(
             str(item.get("macro", "")),
         ),
     )
+
+
+def summarize_macro_verdict_coverage(
+    coverage_rows: Iterable[dict[str, Any]],
+) -> dict[str, int | float]:
+    """
+    Calculates coverage metrics for relevant unique macros.
+
+    A macro is considered covered only when it has an approved
+    macro rule configured. Expression rules are evaluated separately
+    and do not cover one individual macro.
+    """
+
+    rows = list(coverage_rows)
+
+    covered_macros = [
+        row
+        for row in rows
+        if row.get("coverage_status") == "Rule configured"
+    ]
+
+    uncovered_macros = [
+        row
+        for row in rows
+        if (
+            row.get("coverage_status")
+            == "No approved macro rule configured"
+        )
+    ]
+
+    total_macros = len(rows)
+
+    if total_macros == 0:
+        coverage_percentage = 0.0
+    else:
+        coverage_percentage = round(
+            (len(covered_macros) / total_macros) * 100,
+            2,
+        )
+
+    return {
+        "total_macros": total_macros,
+        "covered_macros": len(covered_macros),
+        "uncovered_macros": len(uncovered_macros),
+        "coverage_percentage": coverage_percentage,
+    }
 
 
 def _build_covered_row(
@@ -133,6 +179,22 @@ def _build_covered_row(
                 "",
             )
         ),
+        "example_source_file": str(
+            resolution.get(
+                "example_source_file",
+                "",
+            )
+        ),
+        "example_line": resolution.get(
+            "example_line",
+            "",
+        ),
+        "example_expression": str(
+            resolution.get(
+                "example_expression",
+                "",
+            )
+        ),
     }
 
 
@@ -200,6 +262,22 @@ def _build_uncovered_row(
                 "",
             )
         ),
+        "example_source_file": str(
+            resolution.get(
+                "example_source_file",
+                "",
+            )
+        ),
+        "example_line": resolution.get(
+            "example_line",
+            "",
+        ),
+        "example_expression": str(
+            resolution.get(
+                "example_expression",
+                "",
+            )
+        ),
     }
 
 
@@ -234,48 +312,3 @@ def _format_value(
         return ""
 
     return str(value)
-
-def summarize_macro_verdict_coverage(
-    coverage_rows: Iterable[dict[str, Any]],
-) -> dict[str, int | float]:
-    """
-    Calculates coverage metrics for relevant unique macros.
-
-    A macro is considered covered only when it has an approved
-    macro rule configured. Expression rules are evaluated separately
-    and do not cover one individual macro.
-    """
-
-    rows = list(coverage_rows)
-
-    covered_macros = [
-        row
-        for row in rows
-        if row.get("coverage_status") == "Rule configured"
-    ]
-
-    uncovered_macros = [
-        row
-        for row in rows
-        if (
-            row.get("coverage_status")
-            == "No approved macro rule configured"
-        )
-    ]
-
-    total_macros = len(rows)
-
-    if total_macros == 0:
-        coverage_percentage = 0.0
-    else:
-        coverage_percentage = round(
-            (len(covered_macros) / total_macros) * 100,
-            2,
-        )
-
-    return {
-        "total_macros": total_macros,
-        "covered_macros": len(covered_macros),
-        "uncovered_macros": len(uncovered_macros),
-        "coverage_percentage": coverage_percentage,
-    }

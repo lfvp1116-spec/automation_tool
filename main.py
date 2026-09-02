@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
@@ -11,6 +12,12 @@ from src.conditional_macro_parser import (
     extract_conditional_macro_definitions,
 )
 from src.execution_logger import write_execution_log
+from src.expression_rule_engine import (
+    evaluate_expression_rules,
+)
+from src.final_test_report_generator import (
+    generate_final_test_report,
+)
 from src.macro_indexer import (
     build_project_macro_index,
     get_effective_macro_definitions,
@@ -18,18 +25,20 @@ from src.macro_indexer import (
 from src.macro_resolution_service import (
     resolve_relevant_macros,
 )
+from src.macro_verdict_coverage import (
+    build_macro_verdict_coverage,
+    summarize_macro_verdict_coverage,
+)
 from src.makefile_parser import parse_makefile
 from src.preprocessor_evaluation_service import (
     evaluate_relevant_preprocessor_conditions,
 )
 from src.preprocessor_parser import find_preprocessor_directives
 from src.report_generator import generate_excel_report
-
 from src.rule_config_loader import (
     load_expected_rules,
     load_expression_rules,
 )
-
 from src.rule_engine import (
     evaluate_rules,
     summarize_rule_verdicts,
@@ -42,14 +51,6 @@ from src.unresolved_expression_summary import (
     summarize_unresolved_expressions,
 )
 
-from src.expression_rule_engine import (
-    evaluate_expression_rules,
-)
-
-from src.macro_verdict_coverage import (
-    build_macro_verdict_coverage,
-    summarize_macro_verdict_coverage,
-)
 
 CONFIGURATION_PATH = Path("config/project_paths.yaml")
 
@@ -58,8 +59,14 @@ EXPECTED_RULES_PATH = Path(
 )
 
 OUTPUT_DIRECTORY = Path("output")
-REPORT_PATH = OUTPUT_DIRECTORY / "compiler_switches_report.xlsx"
-EXECUTION_LOG_PATH = OUTPUT_DIRECTORY / "execution_log.txt"
+
+TECHNICAL_REPORT_PATH = (
+    OUTPUT_DIRECTORY / "compiler_switches_report.xlsx"
+)
+
+EXECUTION_LOG_PATH = (
+    OUTPUT_DIRECTORY / "execution_log.txt"
+)
 
 DEFAULT_EXCLUDED_PATHS = [
     ".venv",
@@ -149,8 +156,8 @@ def summarize_makefile_data(
     parsed_makefiles: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """
-    Creates summarized Makefile information for the Compiler
-    Switches worksheet.
+    Creates summarized Makefile information for the technical
+    Compiler Switches worksheet and final test report.
     """
 
     if not parsed_makefiles:
@@ -255,6 +262,37 @@ def classify_preprocessor_conditions(
     return classified_findings
 
 
+def build_final_test_report_path(
+    test_report: dict[str, Any],
+) -> Path:
+    """
+    Builds a safe output filename for the formal final test report.
+
+    The report name is based on the configurable YAML test_id.
+    """
+
+    raw_test_id = str(
+        test_report.get(
+            "test_id",
+            "TSN2001",
+        )
+    ).strip()
+
+    safe_test_id = re.sub(
+        r'[<>:"/\\|?*]',
+        "_",
+        raw_test_id,
+    )
+
+    if not safe_test_id:
+        safe_test_id = "TSN2001"
+
+    return (
+        OUTPUT_DIRECTORY
+        / f"{safe_test_id}_Compiler_Switches_Test_Report.xlsx"
+    )
+
+
 def main() -> None:
     """
     Main entry point for the Automation Tool.
@@ -280,21 +318,46 @@ def main() -> None:
     project_name = str(
         configuration["project_name"]
     )
+
     project_root = Path(
         configuration["project_root"]
     )
-    core = str(configuration["core"])
-    build_mode = str(configuration["build_mode"])
+
+    core = str(
+        configuration["core"]
+    )
+
+    build_mode = str(
+        configuration["build_mode"]
+    )
+
+    test_report = configuration.get(
+        "test_report",
+        {},
+    )
+
+    if not isinstance(test_report, dict):
+        raise ValueError(
+            "The 'test_report' configuration must be "
+            "a YAML dictionary."
+        )
+
+    final_test_report_path = build_final_test_report_path(
+        test_report=test_report
+    )
 
     configured_source_paths = list(
         configuration.get("source_paths", [])
     )
+
     configured_makefiles = list(
         configuration.get("makefiles", [])
     )
+
     extensions = list(
         configuration.get("extensions", [])
     )
+
     configured_exclusions = list(
         configuration.get("exclude_paths", [])
     )
@@ -343,8 +406,8 @@ def main() -> None:
         makefiles_data=parsed_makefiles,
     )
 
-    # Second pass: find #define records inside #if/#elif/#else
-    # branches and retain only definitions whose branch is active.
+    # Second pass: locate #define records inside #if/#elif/#else
+    # branches and retain definitions whose branch is active.
     active_conditional_macro_records = []
 
     for source_file in source_files:
@@ -418,11 +481,11 @@ def main() -> None:
     )
 
     macro_verdict_coverage = (
-            build_macro_verdict_coverage(
-                macro_resolutions=macro_resolution_results,
-                rule_results=rule_results,
-            )
+        build_macro_verdict_coverage(
+            macro_resolutions=macro_resolution_results,
+            rule_results=rule_results,
         )
+    )
 
     macro_coverage_summary = (
         summarize_macro_verdict_coverage(
@@ -511,21 +574,6 @@ def main() -> None:
         f"{len(expression_rule_results)}"
     )
 
-    covered_macros = [
-        item
-        for item in macro_verdict_coverage
-        if item["coverage_status"] == "Rule configured"
-    ]
-
-    uncovered_macros = [
-        item
-        for item in macro_verdict_coverage
-        if (
-            item["coverage_status"]
-            == "No approved macro rule configured"
-        )
-    ]
-
     print(
         "Relevant macros covered by rules: "
         f"{macro_coverage_summary['covered_macros']} / "
@@ -588,8 +636,9 @@ def main() -> None:
         f"{len(unresolved_expression_summary)}"
     )
 
-    generated_report_path = generate_excel_report(
-        output_path=REPORT_PATH,
+    # Technical detailed report.
+    generated_technical_report_path = generate_excel_report(
+        output_path=TECHNICAL_REPORT_PATH,
         project_name=project_name,
         core=core,
         build_mode=build_mode,
@@ -608,6 +657,22 @@ def main() -> None:
         macro_coverage_summary=macro_coverage_summary,
     )
 
+    # Compact formal test-report deliverable.
+    generated_final_test_report_path = (
+        generate_final_test_report(
+            output_path=final_test_report_path,
+            project_name=project_name,
+            core=core,
+            build_mode=build_mode,
+            project_root=project_root,
+            test_report=test_report,
+            makefile_data=makefile_data,
+            rule_results=rule_results,
+            macro_resolutions=macro_resolution_results,
+            macro_verdict_coverage=macro_verdict_coverage,
+        )
+    )
+
     generated_log_path = write_execution_log(
         log_path=EXECUTION_LOG_PATH,
         project_name=project_name,
@@ -616,13 +681,18 @@ def main() -> None:
         source_file_count=len(source_files),
         directive_count=len(findings),
         report_path=str(
-            generated_report_path.resolve()
+            generated_technical_report_path.resolve()
         ),
     )
 
     print(
-        "Excel report generated: "
-        f"{generated_report_path.resolve()}"
+        "Technical Excel report generated: "
+        f"{generated_technical_report_path.resolve()}"
+    )
+
+    print(
+        "Final test report generated: "
+        f"{generated_final_test_report_path.resolve()}"
     )
 
     print(
